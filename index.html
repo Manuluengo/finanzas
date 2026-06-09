@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="theme-color" content="#060A0E"/>
+  <title>Finanzas — Manu</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@200;300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0;background:#060A0E;font-family:'DM Sans',sans-serif}
+    input[type=number]::-webkit-outer-spin-button,
+    input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+    input[type=date]::-webkit-calendar-picker-indicator{filter:invert(0.35)}
+    ::-webkit-scrollbar{width:0}
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+
+
+const S_SALDOS = "fin-saldos-v1";
+const S_MOVS   = "fin-movimientos-v1";
+const S_METAS  = "fin-metas-v1";
+
+const BOLSILLOS = [
+  { id:"efectivo", nombre:"Efectivo",     emoji:"💵", moneda:"ARS", color:"#00C9A7" },
+  { id:"dolares",  nombre:"Dólares",      emoji:"💲", moneda:"USD", color:"#FFB347" },
+  { id:"banco",    nombre:"Banco",        emoji:"🏦", moneda:"ARS", color:"#6B8CFF" },
+  { id:"mp",       nombre:"Mercado Pago", emoji:"📱", moneda:"ARS", color:"#A78BFA" },
+];
+const CATS = [
+  {id:"comida",    nombre:"Comida",        emoji:"🍔", keys:["comida","almuerzo","cena","restaurant","pizza","delivery","super","mercado"]},
+  {id:"transporte",nombre:"Transporte",    emoji:"🚇", keys:["uber","taxi","colectivo","subte","nafta","combustible","remis"]},
+  {id:"gym",       nombre:"Gym",           emoji:"🏋️", keys:["gym","proteína","suplemento","whey","creatina","gimnasio"]},
+  {id:"contenido", nombre:"Contenido",     emoji:"📲", negocio:true, keys:["contenido","reel","foto","equipo","ads","publicidad","canje","ropa de marca"]},
+  {id:"salidas",   nombre:"Salidas",       emoji:"🎉", keys:["salida","bar","boliche","cerveza","birra","tragos","cine"]},
+  {id:"servicios", nombre:"Servicios",     emoji:"🏠", keys:["alquiler","expensa","luz","gas","internet","agua","servicio"]},
+  {id:"salud",     nombre:"Salud",         emoji:"💊", keys:["farmacia","médico","medicamento","turno"]},
+  {id:"ropa",      nombre:"Ropa",          emoji:"👕", keys:["ropa","zapatilla","camisa","jean","remera","calzado"]},
+  {id:"subs",      nombre:"Suscripciones", emoji:"📦", keys:["netflix","spotify","suscripción","app","adobe"]},
+  {id:"otro",      nombre:"Otro",          emoji:"🔧", keys:[]},
+];
+const FUENTES = [
+  {id:"bar",     nombre:"The Oldest Bar", emoji:"🍺", keys:["bar","oldest","trabajo"]},
+  {id:"canje",   nombre:"Canje / Marca",  emoji:"🤝", keys:["canje","marca","regalo","producto"]},
+  {id:"campana", nombre:"Campaña paga",   emoji:"💰", keys:["campaña","sueldo","cobré","cobr","pago","honorario"]},
+  {id:"otro",    nombre:"Otro",           emoji:"➕", keys:[]},
+];
+
+// ── Theme ─────────────────────────────────────────────────────────────────────
+const C = {
+  bg:            "#060A0E",
+  glass:         "rgba(255,255,255,0.05)",
+  glassBorder:   "rgba(255,255,255,0.09)",
+  glassSpec:     "rgba(255,255,255,0.13)",
+  glassTeal:     "rgba(0,201,167,0.08)",
+  glassTealBrd:  "rgba(0,201,167,0.18)",
+  teal:          "#00C9A7",
+  muted:         "#5A7A8A",
+  text:          "#E8F0F5",
+  textDim:       "#98B0BC",
+  red:           "#FF6B6B",
+  warn:          "#FFB347",
+  blue:          "#6B8CFF",
+  purple:        "#A78BFA",
+};
+
+// ── Style helpers ─────────────────────────────────────────────────────────────
+const gCard = (extra={}) => ({
+  background: C.glass,
+  backdropFilter: "blur(28px) saturate(1.8)",
+  WebkitBackdropFilter: "blur(28px) saturate(1.8)",
+  border: `1px solid ${C.glassBorder}`,
+  boxShadow: `inset 0 1px 0 ${C.glassSpec}, inset 0 -1px 0 rgba(0,0,0,0.2), 0 20px 50px rgba(0,0,0,0.35)`,
+  borderRadius: 22,
+  ...extra,
+});
+const gTeal = (extra={}) => ({
+  background: C.glassTeal,
+  backdropFilter: "blur(28px)",
+  WebkitBackdropFilter: "blur(28px)",
+  border: `1px solid ${C.glassTealBrd}`,
+  boxShadow: `inset 0 1px 0 rgba(0,201,167,0.2), 0 8px 30px rgba(0,201,167,0.08)`,
+  borderRadius: 22,
+  ...extra,
+});
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const fmtARS = n => new Intl.NumberFormat("es-AR",{style:"currency",currency:"ARS",minimumFractionDigits:0,maximumFractionDigits:0}).format(n||0);
+const fmtUSD = n => new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",minimumFractionDigits:0,maximumFractionDigits:2}).format(n||0);
+const fmtNum = n => new Intl.NumberFormat("es-AR",{minimumFractionDigits:0,maximumFractionDigits:0}).format(n||0);
+const today  = () => new Date().toISOString().slice(0,10);
+const uid    = () => Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+const loadJ  = (k,d) => { try{ return JSON.parse(localStorage.getItem(k)||"null")??d }catch{return d} };
+const saveJ  = (k,v) => localStorage.setItem(k,JSON.stringify(v));
+
+const greeting = () => {
+  const h = new Date().getHours();
+  if(h<13) return "Buenos días";
+  if(h<20) return "Buenas tardes";
+  return "Buenas noches";
+};
+
+const getBolsillo = id => { const b=BOLSILLOS.find(b=>b.id===id); return b?`${b.emoji} ${b.nombre}`:"—"; };
+const getCatName  = id => { const c=CATS.find(c=>c.id===id);      return c?`${c.emoji} ${c.nombre}`:"—"; };
+const getFuente   = id => { const f=FUENTES.find(f=>f.id===id);    return f?`${f.emoji} ${f.nombre}`:"—"; };
+
+const calcTotal = (saldos, dolar) =>
+  BOLSILLOS.filter(b=>b.moneda==="ARS").reduce((s,b)=>s+(saldos[b.id]||0),0) +
+  (saldos.dolares||0)*(dolar||0);
+
+const fmtFecha = f => new Date(f+"T12:00:00").toLocaleDateString("es-AR",{weekday:"short",day:"numeric",month:"short"});
+
+// ── Natural language parser ───────────────────────────────────────────────────
+const parseNL = (text) => {
+  const t = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+  const numMatch = t.match(/\$?([\d]+(?:[.,]\d+)?)/);
+  const monto = numMatch ? parseFloat(numMatch[1].replace(/\./g,"").replace(",",".")) : null;
+
+  let tipo = null;
+  if(/gaste|pague|compre|salio|gasté|pagué|compré|salió|gaste en/.test(t)) tipo="gasto";
+  else if(/cobre|ingrese|entro|cobré|ingresé|entró|recibi|recibí/.test(t))  tipo="ingreso";
+
+  let catId="otro";
+  for(const c of CATS){ if(c.keys.some(k=>t.includes(k))){ catId=c.id; break; } }
+
+  let fuenteId="otro";
+  for(const f of FUENTES){ if(f.keys.some(k=>t.includes(k))){ fuenteId=f.id; break; } }
+
+  let bolsilloId="efectivo";
+  if(/(banco|transferencia|cuenta)/.test(t))  bolsilloId="banco";
+  if(/(mercado.?pago|\bmp\b)/.test(t))        bolsilloId="mp";
+  if(/(dolar|usd)/.test(t))                   bolsilloId="dolares";
+
+  return { tipo, monto, catId, fuenteId, bolsilloId };
+};
+
+// ── Tips ──────────────────────────────────────────────────────────────────────
+const getTips = (saldos, movs, dolar) => {
+  const tips=[], total=calcTotal(saldos,dolar);
+  const cutoff=new Date(Date.now()-30*864e5).toISOString().slice(0,10);
+  const g30=movs.filter(m=>m.tipo==="gasto"&&m.fecha>=cutoff).reduce((s,m)=>s+m.monto,0);
+  if(g30>0){ const r=total/g30;
+    if(r<1)      tips.push({nivel:"danger", txt:"⚠️ Colchón crítico — menos de 1 mes cubierto."});
+    else if(r<3) tips.push({nivel:"warn",   txt:`📊 Colchón ajustado — ${r.toFixed(1)} meses cubiertos.`});
+    else         tips.push({nivel:"ok",     txt:`✅ Buen colchón — ${r.toFixed(1)} meses cubiertos.`});
+  }
+  if((saldos.efectivo||0)>g30*1.5&&g30>0) tips.push({nivel:"info",txt:"💡 Efectivo parado. Un FCI te da rendimiento sin complicaciones."});
+  if(dolar&&total>0){ const ars=BOLSILLOS.filter(b=>b.moneda==="ARS").reduce((s,b)=>s+(saldos[b.id]||0),0);
+    if(ars/total>0.88) tips.push({nivel:"info",txt:`💲 ${(ars/total*100).toFixed(0)}% en pesos. La inflación erosiona. ¿Algo en dólares?`}); }
+  const gc=movs.filter(m=>m.tipo==="gasto"&&m.negocio&&m.fecha>=cutoff).reduce((s,m)=>s+m.monto,0);
+  if(gc>0&&g30>0) tips.push({nivel:"info",txt:`📲 Reinvertiste ${(gc/g30*100).toFixed(0)}% de tus gastos en contenido este mes.`});
+  return tips;
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// SETUP SCREEN
+// ════════════════════════════════════════════════════════════════════════════
+function SetupScreen({ onDone }) {
+  const [vals, setVals] = useState({efectivo:"",dolares:"",banco:"",mp:""});
+  const save = () => { const s={}; BOLSILLOS.forEach(b=>{s[b.id]=parseFloat(vals[b.id])||0;}); saveJ(S_SALDOS,s); onDone(s); };
+  return (
+    <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"24px 20px"}}>
+      <div style={{fontSize:44,marginBottom:12}}>💰</div>
+      <h1 style={{color:C.text,fontSize:24,fontWeight:700,margin:"0 0 8px",textAlign:"center",letterSpacing:"-0.02em"}}>Configurá tus bolsillos</h1>
+      <p style={{color:C.muted,fontSize:14,textAlign:"center",margin:"0 0 36px",maxWidth:280,lineHeight:1.6}}>Ingresá cuánta plata tenés ahora en cada lugar. Se guarda solo en tu dispositivo.</p>
+      {BOLSILLOS.map(b=>(
+        <div key={b.id} style={{width:"100%",maxWidth:360,marginBottom:12}}>
+          <label style={{color:C.textDim,fontSize:11,fontWeight:600,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:7,paddingLeft:2}}>
+            {b.emoji} {b.nombre} <span style={{color:C.muted,fontWeight:400,letterSpacing:0}}>({b.moneda})</span>
+          </label>
+          <input type="number" inputMode="decimal" placeholder="0" value={vals[b.id]}
+            onChange={e=>setVals(p=>({...p,[b.id]:e.target.value}))}
+            style={{...gCard({borderRadius:14}),width:"100%",padding:"16px 18px",color:C.text,fontSize:24,fontWeight:300,boxSizing:"border-box",outline:"none",fontFamily:"DM Sans, sans-serif"}}/>
+        </div>
+      ))}
+      <button onClick={save} style={{marginTop:20,width:"100%",maxWidth:360,padding:"17px",background:`linear-gradient(135deg, #00C9A7, #00A88E)`,border:"none",borderRadius:16,color:"#060A0E",fontSize:17,fontWeight:700,cursor:"pointer",boxShadow:"0 8px 30px rgba(0,201,167,0.35)"}}>
+        Empezar →
+      </button>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// INICIO TAB
+// ════════════════════════════════════════════════════════════════════════════
+function InicioTab({ saldos, movs, dolar, dolarTime, onQuickSave }) {
+  const [nlText, setNlText]     = useState("");
+  const [parsed, setParsed]     = useState(null);
+  const [confirmed, setConfirmed] = useState(false);
+
+  const total    = calcTotal(saldos, dolar);
+  const tips     = getTips(saldos, movs, dolar);
+  const tipColor = { danger:C.red, warn:C.warn, ok:C.teal, info:C.blue };
+  const cutoff   = new Date(Date.now()-30*864e5).toISOString().slice(0,10);
+  const g30 = movs.filter(m=>m.tipo==="gasto" &&m.fecha>=cutoff).reduce((s,m)=>s+m.monto,0);
+  const i30 = movs.filter(m=>m.tipo==="ingreso"&&m.fecha>=cutoff).reduce((s,m)=>s+m.monto,0);
+  const ahorro = i30-g30;
+
+  const catBreak = CATS.map(c=>({...c,total:movs.filter(m=>m.tipo==="gasto"&&m.catId===c.id&&m.fecha>=cutoff).reduce((s,m)=>s+m.monto,0)}))
+    .filter(c=>c.total>0).sort((a,b)=>b.total-a.total).slice(0,5);
+
+  const segments = BOLSILLOS.map(b=>({...b,val:b.moneda==="USD"?(saldos[b.id]||0)*(dolar||0):(saldos[b.id]||0)})).filter(s=>s.val>0);
+  const barTotal = segments.reduce((s,x)=>s+x.val,0);
+
+  const handleNLSubmit = () => {
+    if(!nlText.trim()) return;
+    const p = parseNL(nlText);
+    if(p.tipo && p.monto) { setParsed(p); }
+    else { setParsed({error:true}); }
+  };
+
+  const handleNLConfirm = () => {
+    if(!parsed||parsed.error) return;
+    const negocio = parsed.tipo==="gasto" && !!CATS.find(c=>c.id===parsed.catId)?.negocio;
+    const mov = { id:uid(), tipo:parsed.tipo, monto:parsed.monto, fecha:today(), nota:nlText.slice(0,60), negocio };
+    if(parsed.tipo==="gasto")   { mov.catId=parsed.catId;      mov.bolsilloId=parsed.bolsilloId; }
+    if(parsed.tipo==="ingreso") { mov.fuenteId=parsed.fuenteId; mov.bolsilloId=parsed.bolsilloId; }
+    onQuickSave(mov);
+    setNlText(""); setParsed(null);
+    setConfirmed(true); setTimeout(()=>setConfirmed(false),2000);
+  };
+
+  return (
+    <div style={{paddingBottom:110}}>
+      {/* Greeting */}
+      <div style={{padding:"0 20px 6px"}}>
+        <div style={{color:C.muted,fontSize:14}}>{greeting()},</div>
+        <div style={{color:C.text,fontSize:28,fontWeight:700,letterSpacing:"-0.02em",lineHeight:1.1}}>Manu 👋</div>
+      </div>
+
+      {/* Patrimonio total */}
+      <div style={{...gTeal({borderRadius:24}),margin:"12px 16px 0",padding:"22px 22px 18px"}}>
+        <div style={{color:"rgba(0,201,167,0.7)",fontSize:10,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",marginBottom:8}}>Patrimonio total</div>
+        <div style={{color:C.text,fontSize:42,fontWeight:200,letterSpacing:"-0.03em",lineHeight:1}}>{fmtARS(total)}</div>
+        {dolar&&(saldos.dolares||0)>0&&<div style={{color:"rgba(0,201,167,0.6)",fontSize:12,marginTop:6}}>incluye {fmtUSD(saldos.dolares)} al blue</div>}
+        {barTotal>0&&<>
+          <div style={{marginTop:18,borderRadius:99,overflow:"hidden",height:5,display:"flex",gap:2}}>
+            {segments.map(s=><div key={s.id} style={{width:`${s.val/barTotal*100}%`,background:s.color,borderRadius:99,minWidth:2}}/>)}
+          </div>
+          <div style={{display:"flex",gap:12,marginTop:8,flexWrap:"wrap"}}>
+            {segments.map(s=><div key={s.id} style={{display:"flex",alignItems:"center",gap:4}}>
+              <div style={{width:6,height:6,borderRadius:"50%",background:s.color}}/>
+              <span style={{color:"rgba(255,255,255,0.4)",fontSize:10}}>{s.emoji} {(s.val/barTotal*100).toFixed(0)}%</span>
+            </div>)}
+          </div>
+        </>}
+      </div>
+
+      {/* Bolsillos 2x2 */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,margin:"10px 16px 0"}}>
+        {BOLSILLOS.map(b=>(
+          <div key={b.id} style={{...gCard({borderRadius:18}),padding:"16px 14px",position:"relative",overflow:"hidden"}}>
+            <div style={{position:"absolute",top:-20,right:-20,width:70,height:70,borderRadius:"50%",background:b.color,opacity:0.06,filter:"blur(16px)"}}/>
+            <div style={{fontSize:20,marginBottom:8}}>{b.emoji}</div>
+            <div style={{color:C.muted,fontSize:10,fontWeight:700,letterSpacing:"0.07em",textTransform:"uppercase",marginBottom:3}}>{b.nombre}</div>
+            <div style={{color:C.text,fontSize:17,fontWeight:600,letterSpacing:"-0.01em"}}>
+              {b.moneda==="USD"?fmtUSD(saldos[b.id]||0):fmtARS(saldos[b.id]||0)}
+            </div>
+            {b.moneda==="USD"&&dolar&&<div style={{color:C.muted,fontSize:10,marginTop:2}}>{fmtARS((saldos[b.id]||0)*dolar)}</div>}
+          </div>
+        ))}
+      </div>
+
+      {/* Dólar + resumen mes */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,margin:"10px 16px 0"}}>
+        <div style={{...gCard({borderRadius:18}),padding:"14px"}}>
+          <div style={{color:C.muted,fontSize:10,fontWeight:700,letterSpacing:"0.07em",textTransform:"uppercase",marginBottom:6}}>💲 Blue</div>
+          <div style={{color:C.warn,fontSize:20,fontWeight:600,letterSpacing:"-0.01em"}}>{dolar?`$${fmtNum(dolar)}`:"—"}</div>
+          {dolarTime&&<div style={{color:C.muted,fontSize:10,marginTop:3}}>{dolarTime}</div>}
+        </div>
+        <div style={{...gCard({borderRadius:18}),padding:"14px"}}>
+          <div style={{color:C.muted,fontSize:10,fontWeight:700,letterSpacing:"0.07em",textTransform:"uppercase",marginBottom:6}}>📅 Este mes</div>
+          <div style={{color:ahorro>=0?C.teal:C.red,fontSize:20,fontWeight:600,letterSpacing:"-0.01em"}}>{ahorro>=0?"+":""}{fmtARS(ahorro)}</div>
+          <div style={{color:C.muted,fontSize:10,marginTop:2}}>{fmtARS(i30)} in · {fmtARS(g30)} out</div>
+        </div>
+      </div>
+
+      {/* Quick entry */}
+      <div style={{...gCard({borderRadius:20}),margin:"10px 16px 0",padding:"16px 18px"}}>
+        <div style={{color:C.textDim,fontSize:11,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:10}}>✍️ Registro rápido</div>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <input
+            type="text" value={nlText} onChange={e=>setNlText(e.target.value)}
+            placeholder={`"gasté 5000 en comida"`}
+            onKeyDown={e=>e.key==="Enter"&&handleNLSubmit()}
+            style={{flex:1,background:"rgba(255,255,255,0.04)",border:`1px solid ${C.glassBorder}`,borderRadius:12,padding:"12px 14px",color:C.text,fontSize:14,outline:"none",fontFamily:"DM Sans, sans-serif"}}
+          />
+          <button onClick={handleNLSubmit} style={{background:C.teal,border:"none",borderRadius:12,padding:"12px 16px",color:"#060A0E",fontSize:18,cursor:"pointer",fontWeight:700,flexShrink:0}}>→</button>
+        </div>
+        {confirmed&&<div style={{color:C.teal,fontSize:13,marginTop:8,fontWeight:600}}>✓ Guardado</div>}
+        {parsed&&!confirmed&&(
+          <div style={{marginTop:10,background:"rgba(0,201,167,0.06)",borderRadius:12,padding:"12px 14px",border:`1px solid rgba(0,201,167,0.15)`}}>
+            {parsed.error ? (
+              <div style={{color:C.red,fontSize:13}}>No entendí. Intentá: "gasté 5000 en comida del banco"</div>
+            ) : (
+              <div>
+                <div style={{color:C.textDim,fontSize:12,marginBottom:8}}>
+                  Detecté: <strong style={{color:C.text}}>{parsed.tipo==="gasto"?"Gasto":"Ingreso"}</strong>{" "}
+                  <strong style={{color:C.teal}}>{fmtARS(parsed.monto)}</strong>{" "}
+                  · {parsed.tipo==="gasto"?getCatName(parsed.catId):getFuente(parsed.fuenteId)}{" "}
+                  · {getBolsillo(parsed.bolsilloId)}
+                </div>
+                <div style={{display:"flex",gap:8}}>
+                  <button onClick={handleNLConfirm} style={{flex:1,background:"linear-gradient(135deg,#00C9A7,#00A88E)",border:"none",borderRadius:10,padding:"10px",color:"#060A0E",fontSize:14,fontWeight:700,cursor:"pointer"}}>Guardar ✓</button>
+                  <button onClick={()=>setParsed(null)} style={{flex:1,background:"rgba(255,255,255,0.06)",border:"none",borderRadius:10,padding:"10px",color:C.muted,fontSize:14,cursor:"pointer"}}>Cancelar</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Tips */}
+      {tips.length>0&&(
+        <div style={{margin:"10px 16px 0"}}>
+          {tips.map((t,i)=>(
+            <div key={i} style={{...gCard({borderRadius:16}),padding:"13px 16px",marginBottom:8,borderLeft:`3px solid ${tipColor[t.nivel]||C.teal}`}}>
+              <span style={{color:C.text,fontSize:13,lineHeight:1.5}}>{t.txt}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Cat breakdown */}
+      {catBreak.length>0&&(
+        <div style={{...gCard({borderRadius:20}),margin:"10px 16px 0",padding:"18px 16px"}}>
+          <div style={{color:C.muted,fontSize:11,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:14}}>Top gastos (30 días)</div>
+          {catBreak.map(c=>{
+            const pct=g30>0?c.total/g30*100:0;
+            return (
+              <div key={c.id} style={{marginBottom:12}}>
+                <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+                  <span style={{color:C.text,fontSize:13}}>{c.emoji} {c.nombre}</span>
+                  <span style={{color:C.red,fontSize:13,fontWeight:600}}>-{fmtARS(c.total)}</span>
+                </div>
+                <div style={{background:"rgba(255,255,255,0.04)",borderRadius:99,height:4,overflow:"hidden"}}>
+                  <div style={{width:`${pct}%`,height:"100%",background:`linear-gradient(90deg, ${C.red}90, ${C.red})`,borderRadius:99}}/>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// REGISTRAR TAB
+// ════════════════════════════════════════════════════════════════════════════
+function RegistrarTab({ onSave }) {
+  const [tipo,setTipo]=useState("gasto");
+  const [monto,setMonto]=useState("");
+  const [catId,setCatId]=useState(null);
+  const [fuenteId,setFuenteId]=useState(null);
+  const [bolsilloId,setBolsilloId]=useState("efectivo");
+  const [origenId,setOrigenId]=useState("banco");
+  const [destinoId,setDestinoId]=useState("efectivo");
+  const [fecha,setFecha]=useState(today());
+  const [nota,setNota]=useState("");
+  const [saved,setSaved]=useState(false);
+
+  const reset=()=>{setMonto("");setCatId(null);setFuenteId(null);setNota("");};
+  const guardar=()=>{
+    const n=parseFloat(monto.replace(",",".")); if(!n||n<=0) return;
+    const negocio=tipo==="gasto"&&!!CATS.find(c=>c.id===catId)?.negocio;
+    const mov={id:uid(),tipo,monto:n,fecha,nota,negocio};
+    if(tipo==="gasto"){mov.catId=catId;mov.bolsilloId=bolsilloId;}
+    if(tipo==="ingreso"){mov.fuenteId=fuenteId;mov.bolsilloId=bolsilloId;}
+    if(tipo==="transfer"){mov.origenId=origenId;mov.destinoId=destinoId;}
+    onSave(mov); setSaved(true); reset(); setTimeout(()=>setSaved(false),1500);
+  };
+
+  const pill=act=>({flex:1,padding:"11px 0",border:"none",borderRadius:12,cursor:"pointer",fontFamily:"DM Sans, sans-serif",fontSize:14,
+    background:act?C.teal:"transparent",color:act?"#060A0E":C.muted,fontWeight:act?700:500,transition:"all 0.15s"});
+
+  const chip=(sel,fn,emoji,label)=>(
+    <div onClick={fn} style={{
+      background:sel?"rgba(0,201,167,0.12)":"rgba(255,255,255,0.03)",
+      border:`1.5px solid ${sel?C.glassTealBrd:C.glassBorder}`,
+      borderRadius:14,padding:"12px 6px",cursor:"pointer",textAlign:"center",transition:"all 0.12s",
+      boxShadow:sel?`inset 0 1px 0 rgba(0,201,167,0.2)`:undefined,
+    }}>
+      <div style={{fontSize:20,marginBottom:3}}>{emoji}</div>
+      <div style={{color:sel?C.teal:C.muted,fontSize:10,fontWeight:600,lineHeight:1.2}}>{label}</div>
+    </div>
+  );
+
+  const lbl=text=><div style={{color:C.muted,fontSize:11,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:10}}>{text}</div>;
+
+  return (
+    <div style={{padding:"16px 16px 110px"}}>
+      <div style={{...gCard({borderRadius:16}),display:"flex",gap:4,marginBottom:22,padding:4}}>
+        {["gasto","ingreso","transfer"].map(t=><button key={t} style={pill(tipo===t)} onClick={()=>{setTipo(t);reset();}}>{t==="gasto"?"Gasto":t==="ingreso"?"Ingreso":"Transferencia"}</button>)}
+      </div>
+
+      <div style={{...gCard({borderRadius:20}),padding:"22px 18px",marginBottom:16,textAlign:"center"}}>
+        <div style={{color:C.muted,fontSize:11,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:12}}>
+          {tipo==="transfer"?"Monto":tipo==="ingreso"?"Ingresé":"Gasté"}
+        </div>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <span style={{color:C.muted,fontSize:32,fontWeight:200,marginRight:4}}>$</span>
+          <input type="number" inputMode="decimal" placeholder="0" value={monto} onChange={e=>setMonto(e.target.value)}
+            style={{border:"none",outline:"none",background:"transparent",color:monto?C.text:"rgba(255,255,255,0.15)",fontSize:52,fontWeight:200,width:"100%",textAlign:"center",letterSpacing:"-0.03em",fontFamily:"DM Sans, sans-serif"}}/>
+        </div>
+      </div>
+
+      {tipo==="gasto"&&<>{lbl("Categoría")}<div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8,marginBottom:16}}>{CATS.map(c=>chip(catId===c.id,()=>setCatId(c.id),c.emoji,c.nombre.split(" ")[0]))}</div></>}
+      {tipo==="ingreso"&&<>{lbl("Fuente")}<div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:16}}>{FUENTES.map(f=>chip(fuenteId===f.id,()=>setFuenteId(f.id),f.emoji,f.nombre.split(" ")[0]))}</div></>}
+      {tipo==="transfer"&&<>
+        {lbl("De")}<div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:14}}>{BOLSILLOS.map(b=>chip(origenId===b.id,()=>setOrigenId(b.id),b.emoji,b.nombre.split(" ")[0]))}</div>
+        {lbl("A")}<div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:14}}>{BOLSILLOS.map(b=>chip(destinoId===b.id,()=>setDestinoId(b.id),b.emoji,b.nombre.split(" ")[0]))}</div>
+      </>}
+      {tipo!=="transfer"&&<>{lbl(tipo==="gasto"?"Sale de":"Entra a")}<div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:16}}>{BOLSILLOS.map(b=>chip(bolsilloId===b.id,()=>setBolsilloId(b.id),b.emoji,b.nombre.split(" ")[0]))}</div></>}
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:20}}>
+        {[["Fecha","date",fecha,e=>setFecha(e.target.value)],["Nota","text",nota,e=>setNota(e.target.value),"opcional"]].map(([l,tp,v,fn,ph])=>(
+          <div key={l}><div style={{color:C.muted,fontSize:11,fontWeight:700,letterSpacing:"0.05em",textTransform:"uppercase",marginBottom:6}}>{l}</div>
+          <input type={tp} value={v} onChange={fn} placeholder={ph||undefined}
+            style={{...gCard({borderRadius:12}),width:"100%",padding:"12px",color:C.text,fontSize:14,boxSizing:"border-box",outline:"none",fontFamily:"DM Sans, sans-serif"}}/></div>
+        ))}
+      </div>
+
+      <button onClick={guardar} style={{width:"100%",padding:"17px",background:saved?`rgba(0,201,167,0.15)`:`linear-gradient(135deg,#00C9A7,#00A88E)`,border:saved?`1px solid ${C.glassTealBrd}`:"none",borderRadius:16,color:saved?C.teal:"#060A0E",fontSize:17,fontWeight:700,cursor:"pointer",transition:"all 0.3s",boxShadow:saved?"none":"0 8px 30px rgba(0,201,167,0.3)",fontFamily:"DM Sans, sans-serif"}}>
+        {saved?"✓ Guardado":"Guardar"}
+      </button>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// METAS TAB
+// ════════════════════════════════════════════════════════════════════════════
+function MetasTab({ metas, setMetas }) {
+  const [showForm, setShowForm] = useState(false);
+  const [nombre, setNombre]     = useState("");
+  const [emoji,  setEmoji]      = useState("🎯");
+  const [objetivo, setObjetivo] = useState("");
+  const [aportId, setAportId]   = useState(null);
+  const [aportAmt, setAportAmt] = useState("");
+
+  const saveM = (ms) => { setMetas(ms); saveJ(S_METAS, ms); };
+
+  const addMeta = () => {
+    if(!nombre||!objetivo) return;
+    const m=[...metas,{id:uid(),nombre,emoji,objetivo:parseFloat(objetivo)||0,acumulado:0}];
+    saveM(m); setShowForm(false); setNombre(""); setEmoji("🎯"); setObjetivo("");
+  };
+
+  const addAporte = () => {
+    const n=parseFloat(aportAmt); if(!n||!aportId) return;
+    const m=metas.map(m=>m.id===aportId?{...m,acumulado:Math.min(m.acumulado+n,m.objetivo)}:m);
+    saveM(m); setAportId(null); setAportAmt("");
+  };
+
+  const delMeta = id => saveM(metas.filter(m=>m.id!==id));
+
+  const emojiOpts = ["🎯","🚀","💻","👟","🏝️","🚗","📷","💍","🏠","🎸","💎","✈️"];
+
+  return (
+    <div style={{padding:"16px 16px 110px"}}>
+      {metas.length===0&&!showForm&&(
+        <div style={{...gCard({borderRadius:22}),padding:"40px 24px",textAlign:"center",marginBottom:16}}>
+          <div style={{fontSize:44,marginBottom:12}}>🎯</div>
+          <div style={{color:C.text,fontSize:16,fontWeight:600,marginBottom:6}}>Sin metas todavía</div>
+          <div style={{color:C.muted,fontSize:13,lineHeight:1.6}}>Creá una meta de ahorro y seguí tu progreso.</div>
+        </div>
+      )}
+
+      {metas.map(m=>{
+        const pct = m.objetivo>0 ? Math.min(m.acumulado/m.objetivo*100,100) : 0;
+        const isAporting = aportId===m.id;
+        return (
+          <div key={m.id} style={{...gCard({borderRadius:22}),padding:"18px 18px",marginBottom:12}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14}}>
+              <div>
+                <span style={{fontSize:26,marginRight:10}}>{m.emoji}</span>
+                <span style={{color:C.text,fontSize:17,fontWeight:700}}>{m.nombre}</span>
+              </div>
+              <button onClick={()=>delMeta(m.id)} style={{background:"none",border:"none",color:"rgba(255,255,255,0.15)",fontSize:14,cursor:"pointer"}}>✕</button>
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+              <span style={{color:C.teal,fontSize:16,fontWeight:600}}>{fmtARS(m.acumulado)}</span>
+              <span style={{color:C.muted,fontSize:13}}>de {fmtARS(m.objetivo)}</span>
+            </div>
+            <div style={{background:"rgba(255,255,255,0.05)",borderRadius:99,height:8,overflow:"hidden",marginBottom:10}}>
+              <div style={{width:`${pct}%`,height:"100%",background:`linear-gradient(90deg,#00C9A7,#00E5C0)`,borderRadius:99,transition:"width 0.5s",boxShadow:"0 0 10px rgba(0,201,167,0.4)"}}/>
+            </div>
+            <div style={{color:C.muted,fontSize:11,textAlign:"right",marginBottom:10}}>{pct.toFixed(0)}% completado</div>
+            {isAporting ? (
+              <div style={{display:"flex",gap:8}}>
+                <input type="number" inputMode="decimal" placeholder="Monto a aportar" value={aportAmt} onChange={e=>setAportAmt(e.target.value)}
+                  style={{flex:1,background:"rgba(255,255,255,0.04)",border:`1px solid ${C.glassBorder}`,borderRadius:10,padding:"10px 12px",color:C.text,fontSize:15,outline:"none",fontFamily:"DM Sans, sans-serif"}}/>
+                <button onClick={addAporte} style={{background:"linear-gradient(135deg,#00C9A7,#00A88E)",border:"none",borderRadius:10,padding:"10px 14px",color:"#060A0E",fontWeight:700,fontSize:14,cursor:"pointer"}}>+</button>
+                <button onClick={()=>{setAportId(null);setAportAmt("");}} style={{background:"rgba(255,255,255,0.05)",border:"none",borderRadius:10,padding:"10px 12px",color:C.muted,fontSize:13,cursor:"pointer"}}>✕</button>
+              </div>
+            ) : (
+              <button onClick={()=>setAportId(m.id)} style={{width:"100%",background:"rgba(0,201,167,0.08)",border:`1px solid ${C.glassTealBrd}`,borderRadius:12,padding:"10px",color:C.teal,fontSize:14,fontWeight:600,cursor:"pointer"}}>
+                + Aportar
+              </button>
+            )}
+          </div>
+        );
+      })}
+
+      {showForm ? (
+        <div style={{...gCard({borderRadius:22}),padding:"20px 18px"}}>
+          <div style={{color:C.textDim,fontSize:13,fontWeight:600,marginBottom:14}}>Nueva meta</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:14}}>
+            {emojiOpts.map(e=>(
+              <div key={e} onClick={()=>setEmoji(e)} style={{width:40,height:40,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:12,fontSize:20,cursor:"pointer",background:emoji===e?"rgba(0,201,167,0.15)":"rgba(255,255,255,0.04)",border:`1px solid ${emoji===e?C.glassTealBrd:C.glassBorder}`}}>{e}</div>
+            ))}
+          </div>
+          <input type="text" placeholder="Nombre (ej: Mac, Viaje)" value={nombre} onChange={e=>setNombre(e.target.value)}
+            style={{...gCard({borderRadius:12}),width:"100%",padding:"13px 14px",color:C.text,fontSize:15,boxSizing:"border-box",outline:"none",marginBottom:10,fontFamily:"DM Sans, sans-serif"}}/>
+          <input type="number" inputMode="decimal" placeholder="Objetivo en $" value={objetivo} onChange={e=>setObjetivo(e.target.value)}
+            style={{...gCard({borderRadius:12}),width:"100%",padding:"13px 14px",color:C.text,fontSize:15,boxSizing:"border-box",outline:"none",marginBottom:14,fontFamily:"DM Sans, sans-serif"}}/>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={addMeta} style={{flex:1,background:"linear-gradient(135deg,#00C9A7,#00A88E)",border:"none",borderRadius:12,padding:"13px",color:"#060A0E",fontSize:15,fontWeight:700,cursor:"pointer"}}>Crear meta</button>
+            <button onClick={()=>setShowForm(false)} style={{flex:1,background:"rgba(255,255,255,0.05)",border:"none",borderRadius:12,padding:"13px",color:C.muted,fontSize:15,cursor:"pointer"}}>Cancelar</button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={()=>setShowForm(true)} style={{width:"100%",padding:"16px",background:"rgba(0,201,167,0.07)",border:`1.5px dashed rgba(0,201,167,0.25)`,borderRadius:18,color:C.teal,fontSize:15,fontWeight:600,cursor:"pointer",transition:"all 0.2s"}}>
+          + Nueva meta
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MOVIMIENTOS TAB
+// ════════════════════════════════════════════════════════════════════════════
+function MovimientosTab({ movs, onDelete }) {
+  const sorted = [...movs].sort((a,b)=>b.fecha.localeCompare(a.fecha));
+  const groups = {};
+  sorted.forEach(m=>{if(!groups[m.fecha])groups[m.fecha]=[];groups[m.fecha].push(m);});
+
+  if(!movs.length) return (
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"50vh",color:C.muted}}>
+      <div style={{fontSize:40,marginBottom:12}}>📋</div>
+      <div style={{fontSize:15,fontWeight:600,color:C.text}}>Sin movimientos todavía</div>
+      <div style={{fontSize:13,marginTop:4}}>Registrá tu primer gasto o ingreso.</div>
+    </div>
+  );
+
+  return (
+    <div style={{padding:"16px 16px 110px"}}>
+      {Object.entries(groups).map(([fecha,items])=>(
+        <div key={fecha} style={{marginBottom:20}}>
+          <div style={{color:C.muted,fontSize:10,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",marginBottom:8}}>{fmtFecha(fecha)}</div>
+          {items.map(m=>(
+            <div key={m.id} style={{...gCard({borderRadius:16}),padding:"13px 14px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{color:C.text,fontSize:14,fontWeight:600,marginBottom:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                  {m.tipo==="gasto"?getCatName(m.catId):m.tipo==="ingreso"?getFuente(m.fuenteId):`${getBolsillo(m.origenId)} → ${getBolsillo(m.destinoId)}`}
+                </div>
+                <div style={{color:C.muted,fontSize:12}}>
+                  {m.tipo==="transfer"?"Transferencia":getBolsillo(m.bolsilloId)}
+                  {m.nota?` · ${m.nota}`:""}{m.negocio&&<span style={{color:C.teal,marginLeft:4}}>· contenido</span>}
+                </div>
+              </div>
+              <div style={{textAlign:"right",marginLeft:12,flexShrink:0}}>
+                <div style={{color:m.tipo==="ingreso"?C.teal:m.tipo==="transfer"?C.muted:C.red,fontSize:15,fontWeight:700}}>
+                  {m.tipo==="ingreso"?"+":m.tipo==="gasto"?"-":""}{fmtARS(m.monto)}
+                </div>
+                <button onClick={()=>onDelete(m.id)} style={{background:"none",border:"none",color:"rgba(255,255,255,0.12)",fontSize:11,cursor:"pointer",padding:"2px 0"}}>eliminar</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// APP
+// ════════════════════════════════════════════════════════════════════════════
+function App() {
+  const [saldos,    setSaldos]    = useState(()=>loadJ(S_SALDOS, null));
+  const [movs,      setMovs]      = useState(()=>loadJ(S_MOVS, []));
+  const [metas,     setMetas]     = useState(()=>loadJ(S_METAS, []));
+  const [tab,       setTab]       = useState("inicio");
+  const [dolar,     setDolar]     = useState(null);
+  const [dolarTime, setDolarTime] = useState(null);
+
+  useEffect(()=>{
+    fetch("https://dolarapi.com/v1/dolares/blue")
+      .then(r=>r.json())
+      .then(d=>{if(d?.venta){setDolar(d.venta);setDolarTime(new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"}));}})
+      .catch(()=>{});
+  },[]);
+
+  const handleSave = mov => {
+    const ns={...saldos};
+    if(mov.tipo==="gasto")    ns[mov.bolsilloId]=(ns[mov.bolsilloId]||0)-mov.monto;
+    if(mov.tipo==="ingreso")  ns[mov.bolsilloId]=(ns[mov.bolsilloId]||0)+mov.monto;
+    if(mov.tipo==="transfer"){ns[mov.origenId]=(ns[mov.origenId]||0)-mov.monto;ns[mov.destinoId]=(ns[mov.destinoId]||0)+mov.monto;}
+    const nm=[mov,...movs];
+    setSaldos(ns);saveJ(S_SALDOS,ns);setMovs(nm);saveJ(S_MOVS,nm);
+    if(mov.tipo!=="transfer") setTab("inicio");
+  };
+
+  const handleDelete = id => {
+    const mov=movs.find(m=>m.id===id);if(!mov)return;
+    const ns={...saldos};
+    if(mov.tipo==="gasto")    ns[mov.bolsilloId]=(ns[mov.bolsilloId]||0)+mov.monto;
+    if(mov.tipo==="ingreso")  ns[mov.bolsilloId]=(ns[mov.bolsilloId]||0)-mov.monto;
+    if(mov.tipo==="transfer"){ns[mov.origenId]=(ns[mov.origenId]||0)+mov.monto;ns[mov.destinoId]=(ns[mov.destinoId]||0)-mov.monto;}
+    const nm=movs.filter(m=>m.id!==id);
+    setSaldos(ns);saveJ(S_SALDOS,ns);setMovs(nm);saveJ(S_MOVS,nm);
+  };
+
+  if(!saldos) return (
+    <div style={{background:C.bg,minHeight:"100vh",fontFamily:"DM Sans, sans-serif"}}>
+      <div style={{position:"fixed",inset:0,background:"radial-gradient(ellipse 80% 50% at 15% 0%,rgba(0,201,167,0.14) 0%,transparent 60%),radial-gradient(ellipse 50% 40% at 85% 90%,rgba(107,140,255,0.1) 0%,transparent 60%),#060A0E",zIndex:0}}/>
+      <div style={{position:"relative",zIndex:1}}><SetupScreen onDone={s=>setSaldos(s)}/></div>
+    </div>
+  );
+
+  const NAV=[
+    {id:"inicio",      emoji:"🏠", label:"INICIO"},
+    {id:"registrar",   emoji:"✏️",  label:"REGISTRAR"},
+    {id:"metas",       emoji:"🎯",  label:"METAS"},
+    {id:"movimientos", emoji:"📋",  label:"HISTORIAL"},
+  ];
+
+  const titles={inicio:`${greeting()}, Manu`,registrar:"Registrar ✏️",metas:"Metas 🎯",movimientos:"Historial 📋"};
+
+  return (
+    <div style={{background:C.bg,minHeight:"100vh",fontFamily:"DM Sans, sans-serif",maxWidth:430,margin:"0 auto",position:"relative"}}>
+      <style>{`
+        *{box-sizing:border-box}
+        body{margin:0;background:#060A0E}
+        input[type=number]::-webkit-outer-spin-button,
+        input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+        input[type=date]::-webkit-calendar-picker-indicator{filter:invert(0.35)}
+        ::-webkit-scrollbar{width:0}
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@200;300;400;500;600;700&display=swap');
+      `}</style>
+
+      {/* Mesh background */}
+      <div style={{position:"fixed",inset:0,maxWidth:430,margin:"0 auto",
+        background:"radial-gradient(ellipse 90% 50% at 10% 0%,rgba(0,201,167,0.13) 0%,transparent 55%),radial-gradient(ellipse 60% 40% at 90% 85%,rgba(107,140,255,0.09) 0%,transparent 55%),radial-gradient(ellipse 50% 35% at 50% 50%,rgba(167,139,250,0.04) 0%,transparent 60%),#060A0E",
+        zIndex:0}}/>
+
+      {/* Content */}
+      <div style={{position:"relative",zIndex:1}}>
+        <div style={{padding:"54px 20px 10px",display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
+          <h1 style={{color:C.text,fontSize:tab==="inicio"?16:22,fontWeight:tab==="inicio"?400:700,margin:0,letterSpacing:tab==="inicio"?0:"-0.01em",color:tab==="inicio"?C.muted:C.text}}>
+            {tab==="inicio"?"Finanzas":titles[tab]}
+          </h1>
+          {tab==="inicio"&&dolar&&(
+            <div style={{...gCard({borderRadius:10}),padding:"6px 12px",color:C.warn,fontSize:13,fontWeight:600}}>
+              Blue ${fmtNum(dolar)}
+            </div>
+          )}
+        </div>
+
+        <div style={{overflowY:"auto"}}>
+          {tab==="inicio"      && <InicioTab saldos={saldos} movs={movs} dolar={dolar} dolarTime={dolarTime} onQuickSave={handleSave}/>}
+          {tab==="registrar"   && <RegistrarTab onSave={handleSave}/>}
+          {tab==="metas"       && <MetasTab metas={metas} setMetas={setMetas}/>}
+          {tab==="movimientos" && <MovimientosTab movs={movs} onDelete={handleDelete}/>}
+        </div>
+      </div>
+
+      {/* Glass nav bar */}
+      <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:430,
+        background:"rgba(6,10,14,0.7)",backdropFilter:"blur(40px) saturate(1.8)",WebkitBackdropFilter:"blur(40px) saturate(1.8)",
+        borderTop:"1px solid rgba(255,255,255,0.07)",display:"flex",
+        paddingBottom:"max(env(safe-area-inset-bottom,0px),16px)",zIndex:10}}>
+        {NAV.map(n=>(
+          <button key={n.id} onClick={()=>setTab(n.id)} style={{
+            flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3,
+            background:"none",border:"none",cursor:"pointer",padding:"10px 0",
+            color:tab===n.id?C.teal:C.muted,transition:"color 0.2s",fontFamily:"DM Sans, sans-serif",
+          }}>
+            <span style={{fontSize:tab===n.id?22:20,transition:"font-size 0.2s",filter:tab===n.id?`drop-shadow(0 0 8px ${C.teal})`:"none"}}>{n.emoji}</span>
+            <span style={{fontSize:9,fontWeight:700,letterSpacing:"0.06em"}}>{n.label}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
