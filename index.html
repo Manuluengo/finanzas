@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="theme-color" content="#060A0E"/>
+  <title>Finanzas — Manu</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@200;300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    *{box-sizing:border-box}html,body{margin:0;padding:0;background:#060A0E;font-family:'DM Sans',sans-serif}
+    input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+    input[type=date]::-webkit-calendar-picker-indicator{filter:invert(0.35)}
+    ::-webkit-scrollbar{width:0}@keyframes spin{to{transform:rotate(360deg)}}
+  </style>
+</head>
+<body><div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+
+const S_SALDOS     = "fin-saldos-v1";
+const S_MOVS       = "fin-movimientos-v1";
+const S_PLANES     = "fin-planes-v1";
+const S_PROGRAMADOS= "fin-programados-v1";
+const S_CONFIRMADOS= "fin-confirmados-v1";
+
+const BOLSILLOS = [
+  { id:"efectivo", nombre:"Efectivo",     emoji:"💵", moneda:"ARS", color:"#00C9A7" },
+  { id:"dolares",  nombre:"Dólares",      emoji:"💲", moneda:"USD", color:"#FFB347" },
+  { id:"banco",    nombre:"Banco",        emoji:"🏦", moneda:"ARS", color:"#6B8CFF" },
+  { id:"mp",       nombre:"Mercado Pago", emoji:"📱", moneda:"ARS", color:"#A78BFA" },
+];
+const CATS = [
+  {id:"comida",    nombre:"Comida",        emoji:"🍔", keys:["comida","almuerzo","cena","restaurant","pizza","delivery","super"]},
+  {id:"transporte",nombre:"Transporte",    emoji:"🚇", keys:["uber","taxi","colectivo","subte","nafta","combustible"]},
+  {id:"gym",       nombre:"Gym",           emoji:"🏋️", keys:["gym","proteína","suplemento","whey","creatina"]},
+  {id:"contenido", nombre:"Contenido",     emoji:"📲", negocio:true, keys:["contenido","reel","foto","equipo","ads","publicidad"]},
+  {id:"salidas",   nombre:"Salidas",       emoji:"🎉", keys:["salida","bar","boliche","cerveza","birra"]},
+  {id:"servicios", nombre:"Servicios",     emoji:"🏠", keys:["alquiler","expensa","luz","gas","internet"]},
+  {id:"salud",     nombre:"Salud",         emoji:"💊", keys:["farmacia","médico","medicamento"]},
+  {id:"ropa",      nombre:"Ropa",          emoji:"👕", keys:["ropa","zapatilla","camisa","jean"]},
+  {id:"subs",      nombre:"Suscripciones", emoji:"📦", keys:["netflix","spotify","suscripción","adobe"]},
+  {id:"otro",      nombre:"Otro",          emoji:"🔧", keys:[]},
+];
+const FUENTES = [
+  {id:"bar",     nombre:"The Oldest Bar", emoji:"🍺", keys:["bar","oldest","trabajo"]},
+  {id:"canje",   nombre:"Canje / Marca",  emoji:"🤝", keys:["canje","marca","regalo"]},
+  {id:"campana", nombre:"Campaña paga",   emoji:"💰", keys:["campaña","cobré","cobr","pago"]},
+  {id:"otro",    nombre:"Otro",           emoji:"➕", keys:[]},
+];
+const DIAS = [
+  {val:1,lbl:"Lu"},{val:2,lbl:"Ma"},{val:3,lbl:"Mi"},
+  {val:4,lbl:"Ju"},{val:5,lbl:"Vi"},{val:6,lbl:"Sá"},{val:0,lbl:"Do"},
+];
+const PLAN_EMOJIS = ["✈️","🏠","🚗","💻","👟","🏝️","📷","💍","🎸","💎","🎓","🐕","🏋️","🎮","👜"];
+
+const C = {
+  bg:"#060A0E", glass:"rgba(255,255,255,0.05)", glassBorder:"rgba(255,255,255,0.09)",
+  glassSpec:"rgba(255,255,255,0.13)", glassTeal:"rgba(0,201,167,0.08)",
+  glassTealBrd:"rgba(0,201,167,0.18)", teal:"#00C9A7", muted:"#5A7A8A",
+  text:"#E8F0F5", textDim:"#98B0BC", red:"#FF6B6B", warn:"#FFB347",
+  blue:"#6B8CFF", purple:"#A78BFA",
+};
+const gCard = (x={}) => ({background:C.glass,backdropFilter:"blur(28px) saturate(1.8)",WebkitBackdropFilter:"blur(28px) saturate(1.8)",border:`1px solid ${C.glassBorder}`,boxShadow:`inset 0 1px 0 ${C.glassSpec},0 20px 50px rgba(0,0,0,0.35)`,borderRadius:22,...x});
+const gTeal = (x={}) => ({background:C.glassTeal,backdropFilter:"blur(28px)",WebkitBackdropFilter:"blur(28px)",border:`1px solid ${C.glassTealBrd}`,boxShadow:`inset 0 1px 0 rgba(0,201,167,0.2),0 8px 30px rgba(0,201,167,0.08)`,borderRadius:22,...x});
+
+const fmtARS = n => new Intl.NumberFormat("es-AR",{style:"currency",currency:"ARS",minimumFractionDigits:0,maximumFractionDigits:0}).format(n||0);
+const fmtUSD = n => new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",minimumFractionDigits:0,maximumFractionDigits:2}).format(n||0);
+const fmtNum = n => new Intl.NumberFormat("es-AR",{minimumFractionDigits:0,maximumFractionDigits:0}).format(n||0);
+const today  = () => new Date().toISOString().slice(0,10);
+const uid    = () => Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+const loadJ  = (k,d) => { try{ return JSON.parse(localStorage.getItem(k)||"null")??d }catch{return d} };
+const saveJ  = (k,v) => localStorage.setItem(k,JSON.stringify(v));
+
+const getBolsillo = id => { const b=BOLSILLOS.find(b=>b.id===id); return b?`${b.emoji} ${b.nombre}`:"—"; };
+const getCatName  = id => { const c=CATS.find(c=>c.id===id);      return c?`${c.emoji} ${c.nombre}`:"—"; };
+const getFuente   = id => { const f=FUENTES.find(f=>f.id===id);    return f?`${f.emoji} ${f.nombre}`:"—"; };
+const calcTotal   = (s,d) => BOLSILLOS.filter(b=>b.moneda==="ARS").reduce((t,b)=>t+(s[b.id]||0),0)+(s.dolares||0)*(d||0);
+const fmtFecha    = f => new Date(f+"T12:00:00").toLocaleDateString("es-AR",{weekday:"short",day:"numeric",month:"short"});
+const greeting    = () => { const h=new Date().getHours(); return h<13?"Buenos días":h<20?"Buenas tardes":"Buenas noches"; };
+
+const parseNL = t => {
+  const s=t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+  const nm=s.match(/\$?([\d]+(?:[.,]\d+)?)/);
+  const monto=nm?parseFloat(nm[1].replace(/\./g,"").replace(",",".")):null;
+  let tipo=null;
+  if(/gaste|pague|compre|salio/.test(s)) tipo="gasto";
+  else if(/cobre|ingrese|entro|recibi/.test(s)) tipo="ingreso";
+  let catId="otro"; for(const c of CATS){if(c.keys.some(k=>s.includes(k))){catId=c.id;break;}}
+  let fuenteId="otro"; for(const f of FUENTES){if(f.keys.some(k=>s.includes(k))){fuenteId=f.id;break;}}
+  let bolsilloId="efectivo";
+  if(/(banco|transferencia|cuenta)/.test(s)) bolsilloId="banco";
+  if(/(mercado.?pago|\bmp\b)/.test(s))       bolsilloId="mp";
+  if(/(dolar|usd)/.test(s))                  bolsilloId="dolares";
+  return {tipo,monto,catId,fuenteId,bolsilloId};
+};
+
+// ── Plan helpers ──────────────────────────────────────────────────────────────
+const getPlanData = (plan) => {
+  const falta = Math.max(0, plan.objetivo - plan.acumulado);
+  const pct   = plan.objetivo > 0 ? Math.min(100, plan.acumulado / plan.objetivo * 100) : 0;
+  const hoy   = new Date();
+  let porMes = null, mesesRestantes = null, fechaEstimada = null;
+
+  if (plan.modo === "fecha" && plan.fechaObjetivo) {
+    const fechaObj = new Date(plan.fechaObjetivo + "T12:00:00");
+    mesesRestantes = Math.max(1, Math.ceil((fechaObj - hoy) / (30 * 864e5)));
+    porMes = falta > 0 ? falta / mesesRestantes : 0;
+    fechaEstimada = fechaObj;
+  } else if (plan.modo === "mensual" && plan.porMes) {
+    porMes = plan.porMes;
+    mesesRestantes = plan.porMes > 0 && falta > 0 ? Math.ceil(falta / plan.porMes) : 0;
+    fechaEstimada = new Date(Date.now() + mesesRestantes * 30 * 864e5);
+  }
+
+  return { falta, pct, porMes, mesesRestantes, fechaEstimada };
+};
+
+const fmtMesAnio = d => d ? d.toLocaleDateString("es-AR", {month:"long", year:"numeric"}) : null;
+
+// ── Tips rápidos (Inicio) ─────────────────────────────────────────────────────
+const getTips = (saldos, movs, dolar) => {
+  const tips = [], total = calcTotal(saldos, dolar);
+  const cutoff = new Date(Date.now()-30*864e5).toISOString().slice(0,10);
+  const g30 = movs.filter(m=>m.tipo==="gasto"&&m.fecha>=cutoff).reduce((s,m)=>s+m.monto,0);
+  if(g30>0){const r=total/g30; if(r<1)tips.push({nivel:"danger",txt:"⚠️ Colchón crítico — menos de 1 mes cubierto."}); else if(r<3)tips.push({nivel:"warn",txt:`📊 Colchón ajustado — ${r.toFixed(1)} meses.`}); else tips.push({nivel:"ok",txt:`✅ Buen colchón — ${r.toFixed(1)} meses cubiertos.`});}
+  if((saldos.efectivo||0)>g30*1.5&&g30>0) tips.push({nivel:"info",txt:"💡 Efectivo parado. Un FCI te da rendimiento sin complicaciones."});
+  if(dolar&&total>0){const ars=BOLSILLOS.filter(b=>b.moneda==="ARS").reduce((s,b)=>s+(saldos[b.id]||0),0); if(ars/total>0.92)tips.push({nivel:"info",txt:`💲 Casi todo en pesos. Algo en dólares te protege de la inflación.`});}
+  const gc=movs.filter(m=>m.tipo==="gasto"&&m.negocio&&m.fecha>=cutoff).reduce((s,m)=>s+m.monto,0);
+  if(gc>0&&g30>0) tips.push({nivel:"info",txt:`📲 Reinvertiste ${(gc/g30*100).toFixed(0)}% en contenido este mes.`});
+  return tips;
+};
+
+// ── Spending pace ─────────────────────────────────────────────────────────────
+const getSpendingPace = (movs) => {
+  const now = new Date();
+  const dom = now.getDate();
+  const dim = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
+  if (dom < 5) return null; // too early in month
+  const monthStart = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-01`;
+  const prevStart  = new Date(now.getFullYear(), now.getMonth()-1, 1).toISOString().slice(0,10);
+  const gastoMes   = movs.filter(m=>m.tipo==="gasto"&&m.fecha>=monthStart).reduce((s,m)=>s+m.monto,0);
+  const gastoPrev  = movs.filter(m=>m.tipo==="gasto"&&m.fecha>=prevStart&&m.fecha<monthStart).reduce((s,m)=>s+m.monto,0);
+  if (gastoPrev < 1000) return null; // no reference
+  const proyectado = gastoMes / dom * dim;
+  const ratio = proyectado / gastoPrev;
+  return { gastoMes, proyectado, gastoPrev, ratio, dom, dim };
+};
+
+// ── Asesor score & insights ───────────────────────────────────────────────────
+const calcScore = (tasaAhorro, runway, saldos, dolar, movs) => {
+  const s1 = Math.max(0, Math.min(25, tasaAhorro/20*25));
+  const s2 = Math.min(25, runway/6*25);
+  const total = calcTotal(saldos,dolar);
+  const pctUSD = dolar&&total>0?(saldos.dolares||0)*dolar/total*100:0;
+  const s3 = Math.min(25, pctUSD/15*25);
+  const c3m = new Date(Date.now()-90*864e5).toISOString().slice(0,10);
+  const src = new Set(movs.filter(m=>m.tipo==="ingreso"&&m.fecha>=c3m).map(m=>m.fuenteId)).size;
+  const s4 = src===0?0:src===1?12:Math.min(25,src*12);
+  return {total:Math.round(s1+s2+s3+s4), s1:Math.round(s1), s2:Math.round(s2), s3:Math.round(s3), s4:Math.round(s4)};
+};
+const scoreLabel = s => s<25?"Arranque 🌱":s<45?"En construcción 🔨":s<65?"Buen camino 📈":s<82?"Muy sólido 💪":"Crack financiero 🏆";
+const scoreColor = s => s<30?C.red:s<55?C.warn:s<75?C.blue:C.teal;
+
+const buildInsights = (saldos, movs, dolar, avgGasto, avgAhorro, tasaAhorro, runway, i3m) => {
+  const out = [];
+  if(movs.length<3){out.push({tipo:"info",titulo:"Empezá a registrar",txt:"Con pocos días de datos todavía no puedo darte consejos precisos. En una semana ya tengo mucho más para mostrarte."});return out;}
+  if(tasaAhorro<0)
+    out.push({tipo:"danger",titulo:"Gastás más de lo que entra",txt:`En promedio te faltan ${fmtARS(Math.abs(avgAhorro))} por mes. Mientras esto pase, tu plata va a ir bajando. Lo primero es encontrar de dónde recortar.`});
+  else if(tasaAhorro<10)
+    out.push({tipo:"warn",titulo:"Casi no estás guardando plata",txt:`De cada $100 que ganás, guardás $${tasaAhorro.toFixed(0)}. Para avanzar hacia cualquier objetivo, lo mínimo recomendado es $20 de cada $100. Pequeños cambios hacen diferencia.`});
+  else if(tasaAhorro<20)
+    out.push({tipo:"warn",titulo:"Ahorrás, pero hay margen para más",txt:`De cada $100 que ganás, guardás $${tasaAhorro.toFixed(0)}. Estás en buen camino — si llegás a $20 de cada $100, la diferencia en un año es enorme.`});
+  else
+    out.push({tipo:"ok",titulo:"Estás guardando bien",txt:`De cada $100 que ganás, guardás $${tasaAhorro.toFixed(0)}. Por encima de lo recomendado. Seguí así y los números van a crecer solos.`});
+  if(avgGasto>0){
+    if(runway<1) out.push({tipo:"danger",titulo:"Sin colchón de emergencia",txt:`Con lo que tenés hoy, aguantás menos de 1 mes sin que entre plata. Si perdés el trabajo o pasa algo, estás muy justo. Prioridad número uno: llegar a tener 3 meses guardados (${fmtARS(avgGasto*3)}) en un lugar que no toques.`});
+    else if(runway<3) out.push({tipo:"warn",titulo:"Tu colchón todavía es chico",txt:`Podés aguantar ${runway.toFixed(1)} meses sin que entre plata. Para estar tranquilo y poder planificar cosas grandes (mudanza, viaje), lo ideal son 3-6 meses de reserva (${fmtARS(avgGasto*3)}–${fmtARS(avgGasto*6)}).`});
+    else out.push({tipo:"ok",titulo:"Buena reserva de emergencia",txt:`Tenés para aguantar ${runway.toFixed(1)} meses sin ingresos — estás en zona segura. Podés empezar a pensar en objetivos más grandes.`});
+  }
+  const c1m = new Date(Date.now()-30*864e5).toISOString().slice(0,10);
+  const g1m = movs.filter(m=>m.tipo==="gasto"&&m.fecha>=c1m);
+  const tg1m = g1m.reduce((s,m)=>s+m.monto,0);
+  if(tg1m>0){
+    const top = CATS.map(c=>({...c,t:g1m.filter(m=>m.catId===c.id).reduce((s,m)=>s+m.monto,0)})).sort((a,b)=>b.t-a.t)[0];
+    if(top&&top.t>tg1m*0.28){const pot=top.t*0.25;out.push({tipo:"info",titulo:`${top.emoji} ${top.nombre} se lleva mucho`,txt:`Este mes, de cada $100 que gastaste, $${(top.t/tg1m*100).toFixed(0)} fueron en ${top.nombre.toLowerCase()}. Si lo bajás un 25%, ahorrarías ${fmtARS(pot)} extra por mes — ${fmtARS(pot*12)} en un año.`});}
+  }
+  if(dolar&&calcTotal(saldos,dolar)>0){const ars=BOLSILLOS.filter(b=>b.moneda==="ARS").reduce((s,b)=>s+(saldos[b.id]||0),0);const pct=ars/calcTotal(saldos,dolar)*100;if(pct>92)out.push({tipo:"info",titulo:"Toda la plata en pesos",txt:`Casi todo lo que tenés está en pesos, que pierden valor con el tiempo. Tener aunque sea el 10-15% en dólares es como un seguro. Hoy eso serían ${fmtUSD(calcTotal(saldos,dolar)*0.1/dolar)}.`});}
+  if(i3m>0){const c3m=new Date(Date.now()-90*864e5).toISOString().slice(0,10);const top=FUENTES.map(f=>({...f,t:movs.filter(m=>m.tipo==="ingreso"&&m.fuenteId===f.id&&m.fecha>=c3m).reduce((s,m)=>s+m.monto,0)})).sort((a,b)=>b.t-a.t)[0];if(top&&top.t/i3m>0.85)out.push({tipo:"info",titulo:`Casi todo viene de ${top.nombre}`,txt:`El ${(top.t/i3m*100).toFixed(0)}% de lo que entraste en los últimos 3 meses vino de ${top.emoji} ${top.nombre}. Cada ingreso extra de contenido o marca reduce ese riesgo.`});}
+  return out;
+};
+
+// ── Pendientes ────────────────────────────────────────────────────────────────
+const getPendientes = (programados, confirmados) => {
+  const now=new Date(), fecha=now.toISOString().slice(0,10), dia=now.getDay(), hora=now.getHours();
+  return programados.filter(p=>{
+    if(!p.activo||!p.diasSemana.includes(dia)||hora<p.horaActivacion) return false;
+    return !confirmados[`${p.id}|${fecha}`];
+  });
+};
+
+// ── ProyeccionChart ───────────────────────────────────────────────────────────
+function ProyeccionChart({ total, avgAhorro }) {
+  if(!avgAhorro||avgAhorro<=0||!total) return null;
+  const months=12, W=300, H=90, PL=0, PR=0, PT=14, PB=18;
+  const pts=Array.from({length:months+1},(_,i)=>total+avgAhorro*i);
+  const maxV=pts[months], minV=total;
+  const x=i=>PL+(i/months)*(W-PL-PR);
+  const y=v=>H-PB-((v-minV)/(maxV-minV||1))*(H-PT-PB);
+  const pathD=pts.map((v,i)=>`${i===0?"M":"L"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  return(
+    <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:"auto",overflow:"visible"}}>
+      <defs><linearGradient id="pgrd" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#00C9A7" stopOpacity="0.3"/><stop offset="100%" stopColor="#00C9A7" stopOpacity="0"/></linearGradient></defs>
+      <path d={`${pathD} L${x(months)},${H-PB} L${x(0)},${H-PB} Z`} fill="url(#pgrd)"/>
+      <path d={pathD} fill="none" stroke="#00C9A7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <circle cx={x(0)} cy={y(total)} r="4" fill="#00C9A7"/>
+      <circle cx={x(months)} cy={y(pts[months])} r="4" fill="#00C9A7"/>
+      {[0,3,6,9,12].map(i=><g key={i}><line x1={x(i)} y1={H-PB} x2={x(i)} y2={H-PB+4} stroke="rgba(255,255,255,0.12)" strokeWidth="1"/><text x={x(i)} y={H-2} textAnchor="middle" fill="rgba(255,255,255,0.3)" fontSize="8">{i===0?"Hoy":`${i}m`}</text></g>)}
+    </svg>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// CONFIRMACION MODAL
+// ════════════════════════════════════════════════════════════════════════════
+function ConfirmacionModal({ pendiente, onConfirm, onSaltar }) {
+  const [monto,setMonto]=useState(String(pendiente.monto));
+  const fuente=FUENTES.find(f=>f.id===pendiente.fuenteId);
+  const bolsillo=BOLSILLOS.find(b=>b.id===pendiente.bolsilloId);
+  const n=parseFloat(monto)||pendiente.monto;
+  return(
+    <div style={{position:"fixed",inset:0,zIndex:200,background:"rgba(0,0,0,0.75)",backdropFilter:"blur(10px)",WebkitBackdropFilter:"blur(10px)",display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
+      <div style={{...gCard({borderRadius:"28px 28px 0 0"}),width:"100%",maxWidth:430,padding:"28px 22px max(env(safe-area-inset-bottom,0px),28px)"}}>
+        <div style={{width:40,height:4,borderRadius:99,background:"rgba(255,255,255,0.15)",margin:"0 auto 24px"}}/>
+        <div style={{color:C.muted,fontSize:11,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:16}}>💰 Ingreso programado</div>
+        <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:6}}>
+          <span style={{fontSize:36}}>{fuente?.emoji}</span>
+          <div><div style={{color:C.text,fontSize:20,fontWeight:700}}>{pendiente.nombre}</div><div style={{color:C.muted,fontSize:13}}>{bolsillo?.emoji} {bolsillo?.nombre}</div></div>
+        </div>
+        <div style={{color:C.textDim,fontSize:14,margin:"14px 0"}}>¿Recibiste este ingreso hoy? Podés cambiar el monto si hubo diferencia.</div>
+        <div style={{...gTeal({borderRadius:14}),display:"flex",alignItems:"center",padding:"14px 16px",marginBottom:20}}>
+          <span style={{color:"rgba(0,201,167,0.6)",fontSize:26,fontWeight:200,marginRight:6}}>$</span>
+          <input type="number" inputMode="decimal" value={monto} onChange={e=>setMonto(e.target.value)}
+            style={{border:"none",outline:"none",background:"transparent",color:C.text,fontSize:36,fontWeight:200,width:"100%",letterSpacing:"-0.02em",fontFamily:"DM Sans, sans-serif"}}/>
+        </div>
+        <button onClick={()=>onConfirm(pendiente,n)} style={{width:"100%",padding:17,background:"linear-gradient(135deg,#00C9A7,#00A88E)",border:"none",borderRadius:16,color:"#060A0E",fontSize:16,fontWeight:700,cursor:"pointer",marginBottom:10}}>✓ Sí, recibí {fmtARS(n)}</button>
+        <button onClick={()=>onSaltar(pendiente)} style={{width:"100%",padding:15,background:"rgba(255,255,255,0.04)",border:`1px solid ${C.glassBorder}`,borderRadius:14,color:C.muted,fontSize:15,cursor:"pointer",fontFamily:"DM Sans, sans-serif"}}>Hoy no / Saltar</button>
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// SETUP SCREEN
+// ════════════════════════════════════════════════════════════════════════════
+function SetupScreen({ onDone }) {
+  const [vals,setVals]=useState({efectivo:"",dolares:"",banco:"",mp:""});
+  const save=()=>{const s={};BOLSILLOS.forEach(b=>{s[b.id]=parseFloat(vals[b.id])||0;});saveJ(S_SALDOS,s);onDone(s);};
+  return(
+    <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"24px 20px"}}>
+      <div style={{fontSize:44,marginBottom:12}}>💰</div>
+      <h1 style={{color:C.text,fontSize:24,fontWeight:700,margin:"0 0 8px",textAlign:"center",letterSpacing:"-0.02em"}}>Configurá tus bolsillos</h1>
+      <p style={{color:C.muted,fontSize:14,textAlign:"center",margin:"0 0 32px",maxWidth:280,lineHeight:1.6}}>Ingresá cuánta plata tenés ahora en cada lugar.</p>
+      {BOLSILLOS.map(b=>(
+        <div key={b.id} style={{width:"100%",maxWidth:360,marginBottom:12}}>
+          <label style={{color:C.textDim,fontSize:11,fontWeight:600,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:7}}>{b.emoji} {b.nombre} ({b.moneda})</label>
+          <input type="number" inputMode="decimal" placeholder="0" value={vals[b.id]} onChange={e=>setVals(p=>({...p,[b.id]:e.target.value}))}
+            style={{...gCard({borderRadius:14}),width:"100%",padding:"16px 18px",color:C.text,fontSize:24,fontWeight:300,boxSizing:"border-box",outline:"none",fontFamily:"DM Sans, sans-serif"}}/>
+        </div>
+      ))}
+      <button onClick={save} style={{marginTop:20,width:"100%",maxWidth:360,padding:17,background:"linear-gradient(135deg,#00C9A7,#00A88E)",border:"none",borderRadius:16,color:"#060A0E",fontSize:17,fontWeight:700,cursor:"pointer"}}>Empezar →</button>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// INICIO TAB
+// ════════════════════════════════════════════════════════════════════════════
+function InicioTab({ saldos, movs, dolar, dolarTime, onQuickSave }) {
+  const [nlText,setNlText]=useState(""); const [parsed,setParsed]=useState(null); const [confirmed,setConfirmed]=useState(false);
+  const total=calcTotal(saldos,dolar), tips=getTips(saldos,movs,dolar), tipColor={danger:C.red,warn:C.warn,ok:C.teal,info:C.blue};
+  const cutoff=new Date(Date.now()-30*864e5).toISOString().slice(0,10);
+  const g30=movs.filter(m=>m.tipo==="gasto"&&m.fecha>=cutoff).reduce((s,m)=>s+m.monto,0);
+  const i30=movs.filter(m=>m.tipo==="ingreso"&&m.fecha>=cutoff).reduce((s,m)=>s+m.monto,0);
+  const ahorro=i30-g30;
+  const segs=BOLSILLOS.map(b=>({...b,val:b.moneda==="USD"?(saldos[b.id]||0)*(dolar||0):(saldos[b.id]||0)})).filter(s=>s.val>0);
+  const barTotal=segs.reduce((s,x)=>s+x.val,0);
+  const catBreak=CATS.map(c=>({...c,total:movs.filter(m=>m.tipo==="gasto"&&m.catId===c.id&&m.fecha>=cutoff).reduce((s,m)=>s+m.monto,0)})).filter(c=>c.total>0).sort((a,b)=>b.total-a.total).slice(0,5);
+  const pace=getSpendingPace(movs);
+
+  const handleNLSubmit=()=>{if(!nlText.trim())return;const p=parseNL(nlText);if(p.tipo&&p.monto)setParsed(p);else setParsed({error:true});};
+  const handleNLConfirm=()=>{
+    if(!parsed||parsed.error)return;
+    const negocio=parsed.tipo==="gasto"&&!!CATS.find(c=>c.id===parsed.catId)?.negocio;
+    const mov={id:uid(),tipo:parsed.tipo,monto:parsed.monto,fecha:today(),nota:nlText.slice(0,60),negocio};
+    if(parsed.tipo==="gasto"){mov.catId=parsed.catId;mov.bolsilloId=parsed.bolsilloId;}
+    if(parsed.tipo==="ingreso"){mov.fuenteId=parsed.fuenteId;mov.bolsilloId=parsed.bolsilloId;}
+    onQuickSave(mov);setNlText("");setParsed(null);setConfirmed(true);setTimeout(()=>setConfirmed(false),2000);
+  };
+
+  return(
+    <div style={{paddingBottom:110}}>
+      <div style={{padding:"0 20px 6px"}}><div style={{color:C.muted,fontSize:14}}>{greeting()},</div><div style={{color:C.text,fontSize:28,fontWeight:700,letterSpacing:"-0.02em",lineHeight:1.1}}>Manu 👋</div></div>
+
+      {/* Pace alert */}
+      {pace&&pace.ratio>1.2&&(
+        <div style={{...gCard({borderRadius:16,borderLeft:`3px solid ${C.warn}`}),margin:"12px 16px 0",padding:"13px 16px"}}>
+          <span style={{color:C.warn,fontWeight:700,fontSize:14}}>⚠️ Ritmo de gasto alto</span>
+          <div style={{color:C.textDim,fontSize:13,marginTop:4}}>Van {pace.dom} días y ya gastaste {fmtARS(pace.gastoMes)}. Si seguís así, cerrarías el mes en {fmtARS(pace.proyectado)} — un {((pace.ratio-1)*100).toFixed(0)}% más que el mes pasado.</div>
+        </div>
+      )}
+      {pace&&pace.ratio<0.7&&(
+        <div style={{...gCard({borderRadius:16,borderLeft:`3px solid ${C.teal}`}),margin:"12px 16px 0",padding:"13px 16px"}}>
+          <span style={{color:C.teal,fontWeight:700,fontSize:14}}>✨ Mes liviano</span>
+          <div style={{color:C.textDim,fontSize:13,marginTop:4}}>Van {pace.dom} días y gastaste bastante menos de lo normal. Si seguís así, vas a tener plata extra este mes — fijate qué hacer con ella en el tab Asesor.</div>
+        </div>
+      )}
+
+      {/* Patrimonio */}
+      <div style={{...gTeal({borderRadius:24}),margin:"12px 16px 0",padding:"22px 22px 18px"}}>
+        <div style={{color:"rgba(0,201,167,0.7)",fontSize:10,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",marginBottom:8}}>Patrimonio total</div>
+        <div style={{color:C.text,fontSize:42,fontWeight:200,letterSpacing:"-0.03em",lineHeight:1}}>{fmtARS(total)}</div>
+        {dolar&&(saldos.dolares||0)>0&&<div style={{color:"rgba(0,201,167,0.6)",fontSize:12,marginTop:6}}>incluye {fmtUSD(saldos.dolares)} al blue</div>}
+        {barTotal>0&&<>
+          <div style={{marginTop:18,borderRadius:99,overflow:"hidden",height:5,display:"flex",gap:2}}>{segs.map(s=><div key={s.id} style={{width:`${s.val/barTotal*100}%`,background:s.color,borderRadius:99,minWidth:2}}/>)}</div>
+          <div style={{display:"flex",gap:12,marginTop:8,flexWrap:"wrap"}}>{segs.map(s=><div key={s.id} style={{display:"flex",alignItems:"center",gap:4}}><div style={{width:6,height:6,borderRadius:"50%",background:s.color}}/><span style={{color:"rgba(255,255,255,0.4)",fontSize:10}}>{s.emoji} {(s.val/barTotal*100).toFixed(0)}%</span></div>)}</div>
+        </>}
+      </div>
+
+      {/* Bolsillos */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,margin:"10px 16px 0"}}>
+        {BOLSILLOS.map(b=>(
+          <div key={b.id} style={{...gCard({borderRadius:18}),padding:"16px 14px",position:"relative",overflow:"hidden"}}>
+            <div style={{position:"absolute",top:-20,right:-20,width:70,height:70,borderRadius:"50%",background:b.color,opacity:0.06,filter:"blur(16px)"}}/>
+            <div style={{fontSize:20,marginBottom:8}}>{b.emoji}</div>
+            <div style={{color:C.muted,fontSize:10,fontWeight:700,letterSpacing:"0.07em",textTransform:"uppercase",marginBottom:3}}>{b.nombre}</div>
+            <div style={{color:C.text,fontSize:17,fontWeight:600}}>{b.moneda==="USD"?fmtUSD(saldos[b.id]||0):fmtARS(saldos[b.id]||0)}</div>
+            {b.moneda==="USD"&&dolar&&<div style={{color:C.muted,fontSize:10,marginTop:2}}>{fmtARS((saldos[b.id]||0)*dolar)}</div>}
+          </div>
+        ))}
+      </div>
+
+      {/* Blue + mes */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,margin:"10px 16px 0"}}>
+        <div style={{...gCard({borderRadius:18}),padding:"14px"}}><div style={{color:C.muted,fontSize:10,fontWeight:700,letterSpacing:"0.07em",textTransform:"uppercase",marginBottom:4}}>💲 Blue</div><div style={{color:C.warn,fontSize:20,fontWeight:600}}>{dolar?`$${fmtNum(dolar)}`:"—"}</div>{dolarTime&&<div style={{color:C.muted,fontSize:10,marginTop:3}}>{dolarTime}</div>}</div>
+        <div style={{...gCard({borderRadius:18}),padding:"14px"}}><div style={{color:C.muted,fontSize:10,fontWeight:700,letterSpacing:"0.07em",textTransform:"uppercase",marginBottom:4}}>📅 Este mes</div><div style={{color:ahorro>=0?C.teal:C.red,fontSize:20,fontWeight:600}}>{ahorro>=0?"+":""}{fmtARS(ahorro)}</div><div style={{color:C.muted,fontSize:10,marginTop:2}}>{fmtARS(i30)} in · {fmtARS(g30)} out</div></div>
+      </div>
+
+      {/* Quick entry */}
+      <div style={{...gCard({borderRadius:20}),margin:"10px 16px 0",padding:"16px 18px"}}>
+        <div style={{color:C.textDim,fontSize:11,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:10}}>✍️ Registro rápido</div>
+        <div style={{display:"flex",gap:8}}>
+          <input type="text" value={nlText} onChange={e=>setNlText(e.target.value)} placeholder={`"gasté 5000 en comida"`}
+            onKeyDown={e=>e.key==="Enter"&&handleNLSubmit()}
+            style={{flex:1,background:"rgba(255,255,255,0.04)",border:`1px solid ${C.glassBorder}`,borderRadius:12,padding:"12px 14px",color:C.text,fontSize:14,outline:"none",fontFamily:"DM Sans, sans-serif"}}/>
+          <button onClick={handleNLSubmit} style={{background:C.teal,border:"none",borderRadius:12,padding:"12px 16px",color:"#060A0E",fontSize:18,cursor:"pointer",fontWeight:700,flexShrink:0}}>→</button>
+        </div>
+        {confirmed&&<div style={{color:C.teal,fontSize:13,marginTop:8,fontWeight:600}}>✓ Guardado</div>}
+        {parsed&&!confirmed&&(
+          <div style={{marginTop:10,background:"rgba(0,201,167,0.06)",borderRadius:12,padding:"12px 14px",border:`1px solid rgba(0,201,167,0.15)`}}>
+            {parsed.error?<div style={{color:C.red,fontSize:13}}>No entendí. Probá: "gasté 5000 en comida del banco"</div>:(
+              <><div style={{color:C.textDim,fontSize:12,marginBottom:8}}>Detecté: <strong style={{color:C.text}}>{parsed.tipo==="gasto"?"Gasto":"Ingreso"}</strong> <strong style={{color:C.teal}}>{fmtARS(parsed.monto)}</strong> · {parsed.tipo==="gasto"?getCatName(parsed.catId):getFuente(parsed.fuenteId)} · {getBolsillo(parsed.bolsilloId)}</div>
+              <div style={{display:"flex",gap:8}}><button onClick={handleNLConfirm} style={{flex:1,background:"linear-gradient(135deg,#00C9A7,#00A88E)",border:"none",borderRadius:10,padding:10,color:"#060A0E",fontSize:14,fontWeight:700,cursor:"pointer"}}>Guardar ✓</button><button onClick={()=>setParsed(null)} style={{flex:1,background:"rgba(255,255,255,0.06)",border:"none",borderRadius:10,padding:10,color:C.muted,fontSize:14,cursor:"pointer"}}>Cancelar</button></div></>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Tips */}
+      {tips.length>0&&<div style={{margin:"10px 16px 0"}}>{tips.map((t,i)=>(<div key={i} style={{...gCard({borderRadius:16}),padding:"13px 16px",marginBottom:8,borderLeft:`3px solid ${tipColor[t.nivel]||C.teal}`}}><span style={{color:C.text,fontSize:13,lineHeight:1.5}}>{t.txt}</span></div>))}</div>}
+
+      {/* Cat breakdown */}
+      {catBreak.length>0&&(<div style={{...gCard({borderRadius:20}),margin:"10px 16px 0",padding:"18px 16px"}}><div style={{color:C.muted,fontSize:11,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:14}}>Top gastos (30 días)</div>{catBreak.map(c=>{const pct=g30>0?c.total/g30*100:0;return(<div key={c.id} style={{marginBottom:12}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}><span style={{color:C.text,fontSize:13}}>{c.emoji} {c.nombre}</span><span style={{color:C.red,fontSize:13,fontWeight:600}}>-{fmtARS(c.total)}</span></div><div style={{background:"rgba(255,255,255,0.04)",borderRadius:99,height:4,overflow:"hidden"}}><div style={{width:`${pct}%`,height:"100%",background:`linear-gradient(90deg,${C.red}90,${C.red})`,borderRadius:99}}/></div></div>);})}</div>)}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MANUAL FORM
+// ════════════════════════════════════════════════════════════════════════════
+function ManualForm({ onSave }) {
+  const [tipo,setTipo]=useState("gasto"); const [monto,setMonto]=useState(""); const [catId,setCatId]=useState(null);
+  const [fuenteId,setFuenteId]=useState(null); const [bolsilloId,setBolsilloId]=useState("efectivo");
+  const [origenId,setOrigenId]=useState("banco"); const [destinoId,setDestinoId]=useState("efectivo");
+  const [fecha,setFecha]=useState(today()); const [nota,setNota]=useState(""); const [saved,setSaved]=useState(false);
+  const reset=()=>{setMonto("");setCatId(null);setFuenteId(null);setNota("");};
+  const guardar=()=>{
+    const n=parseFloat(monto.replace(",",".")); if(!n||n<=0)return;
+    const negocio=tipo==="gasto"&&!!CATS.find(c=>c.id===catId)?.negocio;
+    const mov={id:uid(),tipo,monto:n,fecha,nota,negocio};
+    if(tipo==="gasto"){mov.catId=catId;mov.bolsilloId=bolsilloId;}
+    if(tipo==="ingreso"){mov.fuenteId=fuenteId;mov.bolsilloId=bolsilloId;}
+    if(tipo==="transfer"){mov.origenId=origenId;mov.destinoId=destinoId;}
+    onSave(mov);setSaved(true);reset();setTimeout(()=>setSaved(false),1500);
+  };
+  const pill=act=>({flex:1,padding:"11px 0",border:"none",borderRadius:10,cursor:"pointer",fontFamily:"DM Sans, sans-serif",fontSize:14,background:act?C.teal:"transparent",color:act?"#060A0E":C.muted,fontWeight:act?700:500,transition:"all 0.15s"});
+  const chip=(sel,fn,em,lb)=>(<div onClick={fn} style={{background:sel?"rgba(0,201,167,0.12)":"rgba(255,255,255,0.03)",border:`1.5px solid ${sel?C.glassTealBrd:C.glassBorder}`,borderRadius:12,padding:"11px 6px",cursor:"pointer",textAlign:"center"}}><div style={{fontSize:20,marginBottom:3}}>{em}</div><div style={{color:sel?C.teal:C.muted,fontSize:10,fontWeight:600,lineHeight:1.2}}>{lb}</div></div>);
+  const lbl=t=><div style={{color:C.muted,fontSize:11,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:10}}>{t}</div>;
+  return(
+    <div>
+      <div style={{...gCard({borderRadius:14}),display:"flex",gap:4,marginBottom:20,padding:4}}>{["gasto","ingreso","transfer"].map(t=><button key={t} style={pill(tipo===t)} onClick={()=>{setTipo(t);reset();}}>{t==="gasto"?"Gasto":t==="ingreso"?"Ingreso":"Transferencia"}</button>)}</div>
+      <div style={{...gCard({borderRadius:20}),padding:"20px 16px",marginBottom:16,textAlign:"center"}}>
+        <div style={{color:C.muted,fontSize:11,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:10}}>{tipo==="transfer"?"Monto":tipo==="ingreso"?"Ingresé":"Gasté"}</div>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{color:C.muted,fontSize:32,fontWeight:200,marginRight:4}}>$</span><input type="number" inputMode="decimal" placeholder="0" value={monto} onChange={e=>setMonto(e.target.value)} style={{border:"none",outline:"none",background:"transparent",color:monto?C.text:"rgba(255,255,255,0.15)",fontSize:52,fontWeight:200,width:"100%",textAlign:"center",letterSpacing:"-0.03em",fontFamily:"DM Sans, sans-serif"}}/></div>
+      </div>
+      {tipo==="gasto"&&<>{lbl("Categoría")}<div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8,marginBottom:16}}>{CATS.map(c=>chip(catId===c.id,()=>setCatId(c.id),c.emoji,c.nombre.split(" ")[0]))}</div></>}
+      {tipo==="ingreso"&&<>{lbl("De dónde vino")}<div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:16}}>{FUENTES.map(f=>chip(fuenteId===f.id,()=>setFuenteId(f.id),f.emoji,f.nombre.split(" ")[0]))}</div></>}
+      {tipo==="transfer"&&<>{lbl("De")}<div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:14}}>{BOLSILLOS.map(b=>chip(origenId===b.id,()=>setOrigenId(b.id),b.emoji,b.nombre.split(" ")[0]))}</div>{lbl("A")}<div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:14}}>{BOLSILLOS.map(b=>chip(destinoId===b.id,()=>setDestinoId(b.id),b.emoji,b.nombre.split(" ")[0]))}</div></>}
+      {tipo!=="transfer"&&<>{lbl(tipo==="gasto"?"Sale de":"Entra a")}<div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:16}}>{BOLSILLOS.map(b=>chip(bolsilloId===b.id,()=>setBolsilloId(b.id),b.emoji,b.nombre.split(" ")[0]))}</div></>}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:20}}>
+        <div><div style={{color:C.muted,fontSize:11,fontWeight:700,textTransform:"uppercase",marginBottom:6}}>Fecha</div><input type="date" value={fecha} onChange={e=>setFecha(e.target.value)} style={{...gCard({borderRadius:12}),width:"100%",padding:"12px",color:C.text,fontSize:14,boxSizing:"border-box",outline:"none",fontFamily:"DM Sans, sans-serif"}}/></div>
+        <div><div style={{color:C.muted,fontSize:11,fontWeight:700,textTransform:"uppercase",marginBottom:6}}>Nota</div><input type="text" value={nota} onChange={e=>setNota(e.target.value)} placeholder="opcional" style={{...gCard({borderRadius:12}),width:"100%",padding:"12px",color:C.text,fontSize:14,boxSizing:"border-box",outline:"none",fontFamily:"DM Sans, sans-serif"}}/></div>
+      </div>
+      <button onClick={guardar} style={{width:"100%",padding:17,background:saved?`rgba(0,201,167,0.15)`:`linear-gradient(135deg,#00C9A7,#00A88E)`,border:saved?`1px solid ${C.glassTealBrd}`:"none",borderRadius:16,color:saved?C.teal:"#060A0E",fontSize:17,fontWeight:700,cursor:"pointer",transition:"all 0.3s",fontFamily:"DM Sans, sans-serif"}}>{saved?"✓ Guardado":"Guardar"}</button>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// PROGRAMADOS PANEL
+// ════════════════════════════════════════════════════════════════════════════
+function ProgramadosPanel({ programados, setProgramados }) {
+  const [showForm,setShowForm]=useState(false); const [nombre,setNombre]=useState(""); const [monto,setMonto]=useState("");
+  const [fuenteId,setFuenteId]=useState("bar"); const [bolsilloId,setBolsilloId]=useState("mp");
+  const [dias,setDias]=useState([]); const [hora,setHora]=useState(23);
+  const saveP=ps=>{setProgramados(ps);saveJ(S_PROGRAMADOS,ps);};
+  const toggleDia=d=>setDias(p=>p.includes(d)?p.filter(x=>x!==d):[...p,d]);
+  const addP=()=>{
+    if(!monto||dias.length===0)return;
+    saveP([...programados,{id:uid(),nombre:nombre||FUENTES.find(f=>f.id===fuenteId)?.nombre||"Ingreso",fuenteId,bolsilloId,monto:parseFloat(monto)||0,diasSemana:dias,horaActivacion:hora,activo:true}]);
+    setShowForm(false);setNombre("");setMonto("");setDias([]);setHora(23);
+  };
+  const chip=(sel,fn,em,lb)=>(<div onClick={fn} style={{background:sel?"rgba(0,201,167,0.12)":"rgba(255,255,255,0.03)",border:`1.5px solid ${sel?C.glassTealBrd:C.glassBorder}`,borderRadius:12,padding:"10px 6px",cursor:"pointer",textAlign:"center"}}><div style={{fontSize:18,marginBottom:3}}>{em}</div><div style={{color:sel?C.teal:C.muted,fontSize:10,fontWeight:600}}>{lb}</div></div>);
+  const lbl=t=><div style={{color:C.muted,fontSize:11,fontWeight:700,letterSpacing:"0.07em",textTransform:"uppercase",marginBottom:8}}>{t}</div>;
+  return(
+    <div>
+      {programados.length===0&&!showForm&&<div style={{...gCard({borderRadius:20}),padding:"40px 24px",textAlign:"center",marginBottom:16}}><div style={{fontSize:40,marginBottom:12}}>🔄</div><div style={{color:C.text,fontSize:16,fontWeight:600,marginBottom:6}}>Sin ingresos programados</div><div style={{color:C.muted,fontSize:13}}>Configurá ingresos recurrentes y confirmá cada día.</div></div>}
+      {programados.map(p=>{const fuente=FUENTES.find(f=>f.id===p.fuenteId);const diasLabel=p.diasSemana.map(d=>DIAS.find(x=>x.val===d)?.lbl).join(" · ");return(<div key={p.id} style={{...gCard({borderRadius:18}),padding:"16px",marginBottom:12,opacity:p.activo?1:0.5}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div style={{display:"flex",alignItems:"center",gap:10}}><span style={{fontSize:24}}>{fuente?.emoji}</span><div><div style={{color:C.text,fontSize:15,fontWeight:700}}>{p.nombre}</div><div style={{color:C.muted,fontSize:12}}>{fmtARS(p.monto)} · {diasLabel} · {p.horaActivacion}:00hs</div></div></div><div style={{display:"flex",gap:8}}><button onClick={()=>saveP(programados.map(x=>x.id===p.id?{...x,activo:!x.activo}:x))} style={{background:p.activo?"rgba(0,201,167,0.1)":"rgba(255,255,255,0.04)",border:`1px solid ${p.activo?C.glassTealBrd:C.glassBorder}`,borderRadius:8,padding:"6px 10px",color:p.activo?C.teal:C.muted,fontSize:11,fontWeight:700,cursor:"pointer"}}>{p.activo?"ON":"OFF"}</button><button onClick={()=>saveP(programados.filter(x=>x.id!==p.id))} style={{background:"none",border:"none",color:C.muted,fontSize:16,cursor:"pointer",padding:"6px"}}>✕</button></div></div></div>);})}
+      {showForm?(
+        <div style={{...gCard({borderRadius:22}),padding:"20px 16px"}}>
+          <div style={{color:C.textDim,fontSize:14,fontWeight:700,marginBottom:16}}>Nuevo ingreso programado</div>
+          {lbl("Nombre")}<input type="text" value={nombre} onChange={e=>setNombre(e.target.value)} placeholder="ej: The Oldest Bar" style={{...gCard({borderRadius:12}),width:"100%",padding:"12px 14px",color:C.text,fontSize:14,boxSizing:"border-box",outline:"none",marginBottom:14,fontFamily:"DM Sans, sans-serif"}}/>
+          {lbl("Monto ($)")}<input type="number" inputMode="decimal" placeholder="50000" value={monto} onChange={e=>setMonto(e.target.value)} style={{...gCard({borderRadius:12}),width:"100%",padding:"12px 14px",color:C.text,fontSize:22,fontWeight:300,boxSizing:"border-box",outline:"none",marginBottom:14,fontFamily:"DM Sans, sans-serif"}}/>
+          {lbl("Fuente")}<div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:14}}>{FUENTES.map(f=>chip(fuenteId===f.id,()=>setFuenteId(f.id),f.emoji,f.nombre.split(" ")[0]))}</div>
+          {lbl("Entra a")}<div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:14}}>{BOLSILLOS.map(b=>chip(bolsilloId===b.id,()=>setBolsilloId(b.id),b.emoji,b.nombre.split(" ")[0]))}</div>
+          {lbl("Días")}<div style={{display:"flex",gap:6,marginBottom:14}}>{DIAS.map(d=>(<div key={d.val} onClick={()=>toggleDia(d.val)} style={{flex:1,padding:"10px 0",textAlign:"center",borderRadius:10,cursor:"pointer",background:dias.includes(d.val)?"rgba(0,201,167,0.12)":"rgba(255,255,255,0.03)",border:`1.5px solid ${dias.includes(d.val)?C.glassTealBrd:C.glassBorder}`,color:dias.includes(d.val)?C.teal:C.muted,fontSize:12,fontWeight:700}}>{d.lbl}</div>))}</div>
+          {lbl("Preguntar a partir de las")}<div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}><input type="range" min={0} max={23} value={hora} onChange={e=>setHora(parseInt(e.target.value))} style={{flex:1,accentColor:C.teal,height:4}}/><span style={{color:C.text,fontSize:18,fontWeight:600,minWidth:60,textAlign:"right"}}>{hora}:00hs</span></div>
+          <div style={{display:"flex",gap:8}}><button onClick={addP} style={{flex:1,background:"linear-gradient(135deg,#00C9A7,#00A88E)",border:"none",borderRadius:12,padding:14,color:"#060A0E",fontSize:15,fontWeight:700,cursor:"pointer"}}>Guardar</button><button onClick={()=>setShowForm(false)} style={{flex:1,background:"rgba(255,255,255,0.04)",border:"none",borderRadius:12,padding:14,color:C.muted,fontSize:14,cursor:"pointer"}}>Cancelar</button></div>
+        </div>
+      ):(<button onClick={()=>setShowForm(true)} style={{width:"100%",padding:16,background:"rgba(0,201,167,0.07)",border:`1.5px dashed rgba(0,201,167,0.25)`,borderRadius:18,color:C.teal,fontSize:15,fontWeight:600,cursor:"pointer"}}>+ Nuevo ingreso programado</button>)}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// REGISTRAR TAB
+// ════════════════════════════════════════════════════════════════════════════
+function RegistrarTab({ onSave, programados, setProgramados }) {
+  const [sub,setSub]=useState("manual");
+  return(
+    <div style={{padding:"16px 16px 110px"}}>
+      <div style={{...gCard({borderRadius:14}),display:"flex",gap:4,marginBottom:20,padding:4}}>
+        {[["manual","✏️ Manual"],["programados","🔄 Programados"]].map(([id,lb])=>(
+          <button key={id} onClick={()=>setSub(id)} style={{flex:1,padding:"11px 0",border:"none",borderRadius:10,cursor:"pointer",fontFamily:"DM Sans, sans-serif",fontSize:14,background:sub===id?C.teal:"transparent",color:sub===id?"#060A0E":C.muted,fontWeight:sub===id?700:500,transition:"all 0.15s"}}>{lb}</button>
+        ))}
+      </div>
+      {sub==="manual"&&<ManualForm onSave={onSave}/>}
+      {sub==="programados"&&<ProgramadosPanel programados={programados} setProgramados={setProgramados}/>}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// PLANES TAB
+// ════════════════════════════════════════════════════════════════════════════
+function PlanesTab({ planes, setPlanes, avgAhorro }) {
+  const [showForm, setShowForm] = useState(false);
+  const [nombre,   setNombre]   = useState("");
+  const [emoji,    setEmoji]    = useState("🎯");
+  const [objetivo, setObjetivo] = useState("");
+  const [modo,     setModo]     = useState("fecha"); // "fecha" | "mensual"
+  const [fechaObj, setFechaObj] = useState("");
+  const [porMes,   setPorMes]   = useState("");
+  const [aportId,  setAportId]  = useState(null);
+  const [aportAmt, setAportAmt] = useState("");
+
+  const saveP = ps => { setPlanes(ps); saveJ(S_PLANES, ps); };
+
+  const addPlan = () => {
+    if (!nombre || !objetivo) return;
+    const p = {
+      id:uid(), nombre, emoji, objetivo:parseFloat(objetivo)||0, acumulado:0,
+      modo, fechaObjetivo: modo==="fecha"?fechaObj:null, porMes: modo==="mensual"?(parseFloat(porMes)||0):null,
+    };
+    saveP([...planes, p]);
+    setShowForm(false); setNombre(""); setEmoji("🎯"); setObjetivo(""); setFechaObj(""); setPorMes("");
+  };
+
+  const addAporte = () => {
+    const n = parseFloat(aportAmt); if(!n||!aportId) return;
+    saveP(planes.map(p=>p.id===aportId?{...p,acumulado:Math.min(p.acumulado+n,p.objetivo)}:p));
+    setAportId(null); setAportAmt("");
+  };
+
+  // Derived values for the form preview
+  const objN    = parseFloat(objetivo)||0;
+  const porMesN = parseFloat(porMes)||0;
+  const derivedMeses = modo==="mensual"&&porMesN>0&&objN>0 ? Math.ceil(objN/porMesN) : null;
+  const derivedPorMes = modo==="fecha"&&fechaObj&&objN>0 ? (() => {
+    const m = Math.max(1, Math.ceil((new Date(fechaObj+"T12:00:00")-Date.now())/(30*864e5)));
+    return objN/m;
+  })() : null;
+
+  const lbl=t=><div style={{color:C.muted,fontSize:11,fontWeight:700,letterSpacing:"0.07em",textTransform:"uppercase",marginBottom:8}}>{t}</div>;
+
+  return (
+    <div style={{padding:"16px 16px 110px"}}>
+
+      {planes.length===0&&!showForm&&(
+        <div style={{...gCard({borderRadius:22}),padding:"40px 24px",textAlign:"center",marginBottom:16}}>
+          <div style={{fontSize:44,marginBottom:12}}>🎯</div>
+          <div style={{color:C.text,fontSize:18,fontWeight:700,marginBottom:8}}>¿Para qué estás ahorrando?</div>
+          <div style={{color:C.muted,fontSize:14,lineHeight:1.65,marginBottom:0}}>Creá un plan y te digo exactamente cuánto guardar por mes para llegar.</div>
+        </div>
+      )}
+
+      {planes.map(p => {
+        const d = getPlanData(p);
+        const isAp = aportId===p.id;
+        const progColor = d.pct>80?C.teal:d.pct>40?C.blue:C.warn;
+        return (
+          <div key={p.id} style={{...gCard({borderRadius:22}),padding:"20px 18px",marginBottom:14}}>
+            {/* Header */}
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
+              <div style={{display:"flex",alignItems:"center",gap:12}}>
+                <span style={{fontSize:32}}>{p.emoji}</span>
+                <div>
+                  <div style={{color:C.text,fontSize:18,fontWeight:700}}>{p.nombre}</div>
+                  <div style={{color:C.muted,fontSize:12,marginTop:2}}>Objetivo: {fmtARS(p.objetivo)}</div>
+                </div>
+              </div>
+              <button onClick={()=>saveP(planes.filter(x=>x.id!==p.id))} style={{background:"none",border:"none",color:"rgba(255,255,255,0.15)",fontSize:14,cursor:"pointer",padding:4}}>✕</button>
+            </div>
+
+            {/* THE KEY NUMBER */}
+            {d.porMes&&d.porMes>0&&(
+              <div style={{...gTeal({borderRadius:16}),padding:"16px",marginBottom:16,textAlign:"center"}}>
+                <div style={{color:"rgba(0,201,167,0.7)",fontSize:11,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:6}}>Guardá por mes</div>
+                <div style={{color:C.text,fontSize:36,fontWeight:200,letterSpacing:"-0.03em"}}>{fmtARS(d.porMes)}</div>
+                {avgAhorro>0&&d.porMes>avgAhorro&&(
+                  <div style={{color:C.warn,fontSize:12,marginTop:6}}>⚠️ Tu ahorro promedio actual es {fmtARS(avgAhorro)}/mes — necesitás aumentarlo</div>
+                )}
+                {avgAhorro>0&&d.porMes<=avgAhorro&&(
+                  <div style={{color:C.teal,fontSize:12,marginTop:6}}>✓ Alcanzable con tu ahorro actual</div>
+                )}
+              </div>
+            )}
+
+            {/* Progress */}
+            <div style={{marginBottom:12}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+                <span style={{color:C.teal,fontSize:15,fontWeight:600}}>{fmtARS(p.acumulado)}</span>
+                <span style={{color:C.muted,fontSize:13}}>{d.pct.toFixed(0)}%</span>
+              </div>
+              <div style={{background:"rgba(255,255,255,0.05)",borderRadius:99,height:10,overflow:"hidden",marginBottom:6}}>
+                <div style={{width:`${d.pct}%`,height:"100%",background:`linear-gradient(90deg,${progColor},${progColor}CC)`,borderRadius:99,transition:"width 0.6s",boxShadow:`0 0 10px ${progColor}50`}}/>
+              </div>
+              <div style={{color:C.muted,fontSize:12}}>
+                {d.falta>0?`Faltán ${fmtARS(d.falta)}`:"¡Meta alcanzada! 🎉"}
+                {d.fechaEstimada&&d.falta>0&&<span> · llegás en <strong style={{color:C.textDim}}>{fmtMesAnio(d.fechaEstimada)}</strong></span>}
+              </div>
+            </div>
+
+            {/* Aportar */}
+            {isAp?(
+              <div style={{display:"flex",gap:8}}>
+                <input type="number" inputMode="decimal" placeholder="¿Cuánto aportás?" value={aportAmt} onChange={e=>setAportAmt(e.target.value)}
+                  style={{flex:1,background:"rgba(255,255,255,0.04)",border:`1px solid ${C.glassBorder}`,borderRadius:10,padding:"11px 12px",color:C.text,fontSize:16,outline:"none",fontFamily:"DM Sans, sans-serif"}}/>
+                <button onClick={addAporte} style={{background:"linear-gradient(135deg,#00C9A7,#00A88E)",border:"none",borderRadius:10,padding:"11px 14px",color:"#060A0E",fontWeight:700,fontSize:14,cursor:"pointer"}}>+</button>
+                <button onClick={()=>{setAportId(null);setAportAmt("");}} style={{background:"rgba(255,255,255,0.05)",border:"none",borderRadius:10,padding:"11px 12px",color:C.muted,fontSize:13,cursor:"pointer"}}>✕</button>
+              </div>
+            ):(
+              <button onClick={()=>setAportId(p.id)} style={{width:"100%",background:"rgba(0,201,167,0.08)",border:`1px solid ${C.glassTealBrd}`,borderRadius:12,padding:11,color:C.teal,fontSize:14,fontWeight:600,cursor:"pointer"}}>
+                + Aportar al plan
+              </button>
+            )}
+          </div>
+        );
+      })}
+
+      {/* Create form */}
+      {showForm ? (
+        <div style={{...gCard({borderRadius:22}),padding:"20px 18px"}}>
+          <div style={{color:C.textDim,fontSize:15,fontWeight:700,marginBottom:18}}>Nuevo plan de ahorro</div>
+
+          {/* Emoji */}
+          <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:16}}>
+            {PLAN_EMOJIS.map(e=>(<div key={e} onClick={()=>setEmoji(e)} style={{width:42,height:42,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:12,fontSize:22,cursor:"pointer",background:emoji===e?"rgba(0,201,167,0.15)":"rgba(255,255,255,0.04)",border:`1px solid ${emoji===e?C.glassTealBrd:C.glassBorder}`}}>{e}</div>))}
+          </div>
+
+          {lbl("¿Para qué estás ahorrando?")}
+          <input type="text" placeholder="ej: Viaje a Europa, Moto, Mudanza" value={nombre} onChange={e=>setNombre(e.target.value)}
+            style={{...gCard({borderRadius:12}),width:"100%",padding:"13px 14px",color:C.text,fontSize:15,boxSizing:"border-box",outline:"none",marginBottom:14,fontFamily:"DM Sans, sans-serif"}}/>
+
+          {lbl("¿Cuánto necesitás en total?")}
+          <div style={{...gCard({borderRadius:12}),display:"flex",alignItems:"center",padding:"0 14px",marginBottom:14}}>
+            <span style={{color:C.muted,fontSize:24,fontWeight:200}}>$</span>
+            <input type="number" inputMode="decimal" placeholder="0" value={objetivo} onChange={e=>setObjetivo(e.target.value)}
+              style={{border:"none",outline:"none",background:"transparent",color:C.text,fontSize:24,fontWeight:300,width:"100%",padding:"14px 8px",fontFamily:"DM Sans, sans-serif"}}/>
+          </div>
+
+          {lbl("¿Cómo querés planificarlo?")}
+          <div style={{...gCard({borderRadius:12}),display:"flex",gap:4,padding:4,marginBottom:14}}>
+            {[["fecha","📅 Tengo una fecha"],["mensual","💰 Puedo guardar $X/mes"]].map(([id,lb])=>(
+              <button key={id} onClick={()=>setModo(id)} style={{flex:1,padding:"10px 6px",border:"none",borderRadius:10,cursor:"pointer",fontFamily:"DM Sans, sans-serif",fontSize:12,background:modo===id?C.teal:"transparent",color:modo===id?"#060A0E":C.muted,fontWeight:modo===id?700:500}}>{lb}</button>
+            ))}
+          </div>
+
+          {modo==="fecha"&&(
+            <>
+              {lbl("¿Cuándo querés tenerlo?")}
+              <input type="date" value={fechaObj} onChange={e=>setFechaObj(e.target.value)}
+                style={{...gCard({borderRadius:12}),width:"100%",padding:"13px 14px",color:C.text,fontSize:15,boxSizing:"border-box",outline:"none",marginBottom:14,fontFamily:"DM Sans, sans-serif"}}/>
+              {derivedPorMes&&objN>0&&fechaObj&&(
+                <div style={{...gTeal({borderRadius:12}),padding:"12px 14px",marginBottom:14}}>
+                  <div style={{color:"rgba(0,201,167,0.7)",fontSize:11,fontWeight:700,textTransform:"uppercase",marginBottom:4}}>Vas a necesitar guardar</div>
+                  <div style={{color:C.text,fontSize:28,fontWeight:300}}>{fmtARS(derivedPorMes)}<span style={{fontSize:14,color:C.muted}}> / mes</span></div>
+                </div>
+              )}
+            </>
+          )}
+
+          {modo==="mensual"&&(
+            <>
+              {lbl("¿Cuánto podés guardar por mes?")}
+              <div style={{...gCard({borderRadius:12}),display:"flex",alignItems:"center",padding:"0 14px",marginBottom:14}}>
+                <span style={{color:C.muted,fontSize:24,fontWeight:200}}>$</span>
+                <input type="number" inputMode="decimal" placeholder="0" value={porMes} onChange={e=>setPorMes(e.target.value)}
+                  style={{border:"none",outline:"none",background:"transparent",color:C.text,fontSize:24,fontWeight:300,width:"100%",padding:"14px 8px",fontFamily:"DM Sans, sans-serif"}}/>
+              </div>
+              {derivedMeses&&objN>0&&porMesN>0&&(
+                <div style={{...gTeal({borderRadius:12}),padding:"12px 14px",marginBottom:14}}>
+                  <div style={{color:"rgba(0,201,167,0.7)",fontSize:11,fontWeight:700,textTransform:"uppercase",marginBottom:4}}>Llegás en</div>
+                  <div style={{color:C.text,fontSize:28,fontWeight:300}}>{derivedMeses<12?`${derivedMeses} meses`:`${(derivedMeses/12).toFixed(1)} años`}</div>
+                  <div style={{color:"rgba(0,201,167,0.6)",fontSize:12,marginTop:4}}>{fmtMesAnio(new Date(Date.now()+derivedMeses*30*864e5))}</div>
+                </div>
+              )}
+            </>
+          )}
+
+          <div style={{display:"flex",gap:8,marginTop:4}}>
+            <button onClick={addPlan} style={{flex:1,background:"linear-gradient(135deg,#00C9A7,#00A88E)",border:"none",borderRadius:14,padding:15,color:"#060A0E",fontSize:16,fontWeight:700,cursor:"pointer"}}>Crear plan</button>
+            <button onClick={()=>setShowForm(false)} style={{flex:1,background:"rgba(255,255,255,0.05)",border:"none",borderRadius:14,padding:15,color:C.muted,fontSize:15,cursor:"pointer"}}>Cancelar</button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={()=>setShowForm(true)} style={{width:"100%",padding:16,background:"rgba(0,201,167,0.07)",border:`1.5px dashed rgba(0,201,167,0.25)`,borderRadius:18,color:C.teal,fontSize:15,fontWeight:600,cursor:"pointer"}}>+ Nuevo plan</button>
+      )}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MOVIMIENTOS TAB
+// ════════════════════════════════════════════════════════════════════════════
+function MovimientosTab({ movs, onDelete }) {
+  const sorted=[...(movs||[])].sort((a,b)=>b.fecha.localeCompare(a.fecha));
+  const groups={};
+  sorted.forEach(m=>{if(!groups[m.fecha])groups[m.fecha]=[];groups[m.fecha].push(m);});
+  if(!movs?.length) return(<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"50vh",color:C.muted}}><div style={{fontSize:40,marginBottom:12}}>📋</div><div style={{fontSize:15,fontWeight:600,color:C.text}}>Sin movimientos todavía</div><div style={{fontSize:13,marginTop:4}}>Registrá tu primer gasto o ingreso.</div></div>);
+  return(
+    <div style={{padding:"16px 16px 110px"}}>
+      {Object.entries(groups).map(([fecha,items])=>(
+        <div key={fecha} style={{marginBottom:20}}>
+          <div style={{color:C.muted,fontSize:10,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",marginBottom:8}}>{fmtFecha(fecha)}</div>
+          {items.map(m=>(
+            <div key={m.id} style={{...gCard({borderRadius:16}),padding:"13px 14px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{color:C.text,fontSize:14,fontWeight:600,marginBottom:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                  {m.tipo==="gasto"?getCatName(m.catId):m.tipo==="ingreso"?getFuente(m.fuenteId):`${getBolsillo(m.origenId)} → ${getBolsillo(m.destinoId)}`}
+                  {m.programado&&<span style={{color:C.teal,fontSize:10,marginLeft:6}}>🔄</span>}
+                </div>
+                <div style={{color:C.muted,fontSize:12}}>{m.tipo==="transfer"?"Transferencia":getBolsillo(m.bolsilloId)}{m.nota?` · ${m.nota}`:""}{m.negocio&&<span style={{color:C.teal,marginLeft:4}}>· contenido</span>}</div>
+              </div>
+              <div style={{textAlign:"right",marginLeft:12,flexShrink:0}}>
+                <div style={{color:m.tipo==="ingreso"?C.teal:m.tipo==="transfer"?C.muted:C.red,fontSize:15,fontWeight:700}}>{m.tipo==="ingreso"?"+":m.tipo==="gasto"?"-":""}{fmtARS(m.monto)}</div>
+                <button onClick={()=>onDelete(m.id)} style={{background:"none",border:"none",color:"rgba(255,255,255,0.12)",fontSize:11,cursor:"pointer",padding:"2px 0"}}>eliminar</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// ASESOR TAB
+// ════════════════════════════════════════════════════════════════════════════
+function TipCard({ emoji, titulo, contenido }) {
+  const [open,setOpen]=useState(false);
+  return(
+    <div onClick={()=>setOpen(!open)} style={{...gCard({borderRadius:14}),padding:"13px 16px",marginBottom:8,cursor:"pointer"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <div style={{display:"flex",gap:10,alignItems:"center"}}><span style={{fontSize:20}}>{emoji}</span><span style={{color:C.text,fontSize:13,fontWeight:600}}>{titulo}</span></div>
+        <span style={{color:C.muted,fontSize:12}}>{open?"▲":"▼"}</span>
+      </div>
+      {open&&<div style={{color:C.textDim,fontSize:13,lineHeight:1.7,marginTop:10,paddingTop:10,borderTop:`1px solid ${C.glassBorder}`}}>{contenido}</div>}
+    </div>
+  );
+}
+
+function AsesorTab({ saldos, movs, dolar, planes }) {
+  const total=calcTotal(saldos,dolar);
+  const c3m=new Date(Date.now()-90*864e5).toISOString().slice(0,10);
+  const m3m=movs.filter(m=>m.fecha>=c3m);
+  const g3m=m3m.filter(m=>m.tipo==="gasto").reduce((s,m)=>s+m.monto,0);
+  const i3m=m3m.filter(m=>m.tipo==="ingreso").reduce((s,m)=>s+m.monto,0);
+  const fechas=m3m.map(m=>m.fecha).sort();
+  const div=Math.min(3,Math.max(1,fechas.length>0?Math.ceil((Date.now()-new Date(fechas[0]+"T12:00:00"))/(30*864e5)):1));
+  const avgGasto=(g3m/div), avgAhorro=((i3m-g3m)/div), tasaAhorro=i3m>0?(i3m-g3m)/i3m*100:0, runway=avgGasto>0?total/avgGasto:0;
+  const sc=calcScore(tasaAhorro,runway,saldos,dolar,movs);
+  const sc_c=scoreColor(sc.total);
+  const insights=buildInsights(saldos,movs,dolar,avgGasto,avgAhorro,tasaAhorro,runway,i3m);
+  const tipColor={danger:C.red,warn:C.warn,ok:C.teal,info:C.blue};
+  const pace=getSpendingPace(movs);
+
+  // Qué hacer con lo que sobró
+  const now=new Date();
+  const monthStart=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-01`;
+  const gMes=movs.filter(m=>m.tipo==="gasto"&&m.fecha>=monthStart).reduce((s,m)=>s+m.monto,0);
+  const iMes=movs.filter(m=>m.tipo==="ingreso"&&m.fecha>=monthStart).reduce((s,m)=>s+m.monto,0);
+  const extraMes=iMes-gMes;
+
+  const sugestiones=[];
+  if(extraMes>0){
+    if(runway<3) sugestiones.push({emoji:"🛡️",titulo:"Reforzá tu reserva",txt:`Todavía no tenés 3 meses de reserva. Estos ${fmtARS(extraMes)} guardados en el banco o efectivo te acercan a ese objetivo.`});
+    const planActivo=planes.find(p=>p.objetivo>p.acumulado);
+    if(planActivo&&runway>=2) sugestiones.push({emoji:planActivo.emoji,titulo:`Sumá a "${planActivo.nombre}"`,txt:`Podés aportar ${fmtARS(extraMes)} a tu plan — te acercás a tu objetivo.`});
+    if(dolar&&total>0&&(saldos.dolares||0)*dolar/total<0.1&&runway>=3) sugestiones.push({emoji:"💲",titulo:"Comprá dólares",txt:`Con ${fmtARS(extraMes)} podés comprar aprox. ${fmtUSD(extraMes/dolar)} al blue. Tener algo en dólares protege tu plata de la inflación.`});
+    if(sugestiones.length===0) sugestiones.push({emoji:"📈",titulo:"Tu reserva ya está bien",txt:`Tenés ${runway.toFixed(1)} meses de reserva — muy bien. Este extra lo podés meter en un plazo fijo o FCI para que rinda un poco.`});
+  }
+
+  return(
+    <div style={{paddingBottom:110}}>
+      {/* Score */}
+      <div style={{...gCard({borderRadius:24}),margin:"0 16px",padding:"22px 20px"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
+          <div>
+            <div style={{color:C.muted,fontSize:11,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:8}}>Tu situación financiera</div>
+            <div style={{color:sc_c,fontSize:52,fontWeight:200,letterSpacing:"-0.04em",lineHeight:1}}>{sc.total}</div>
+            <div style={{color:sc_c,fontSize:14,fontWeight:600,marginTop:6}}>{scoreLabel(sc.total)}</div>
+          </div>
+          <div style={{fontSize:52,filter:`drop-shadow(0 0 20px ${sc_c}40)`}}>{sc.total<30?"🌱":sc.total<50?"🔨":sc.total<70?"📈":sc.total<85?"💪":"🏆"}</div>
+        </div>
+        {[
+          {lbl:"¿Cuánto guardás de lo que ganás?",val:sc.s1,desc:i3m>0?`$${tasaAhorro.toFixed(0)} de cada $100`:"sin datos"},
+          {lbl:"¿Cuánto aguantás sin trabajar?",  val:sc.s2,desc:avgGasto>0?`${runway.toFixed(1)} meses`:"sin datos"},
+          {lbl:"¿Tenés algo en dólares?",          val:sc.s3,desc:(saldos.dolares||0)>0?`USD ${fmtNum(saldos.dolares||0)}`:"nada todavía"},
+          {lbl:"¿De cuántos lados te entra plata?",val:sc.s4,desc:"fuentes de ingreso"},
+        ].map(c=>(
+          <div key={c.lbl} style={{marginBottom:14}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{color:C.textDim,fontSize:12}}>{c.lbl}</span><span style={{color:c.val/25>0.6?C.teal:c.val/25>0.3?C.warn:C.red,fontSize:12,fontWeight:700}}>{c.val}/25</span></div>
+            <div style={{background:"rgba(255,255,255,0.05)",borderRadius:99,height:5,overflow:"hidden"}}><div style={{width:`${c.val/25*100}%`,height:"100%",background:c.val/25>0.6?C.teal:c.val/25>0.3?C.warn:C.red,borderRadius:99,transition:"width 0.6s"}}/></div>
+            <div style={{color:C.muted,fontSize:11,marginTop:3}}>{c.desc}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Ritmo del mes */}
+      {pace&&(
+        <div style={{...gCard({borderRadius:18,borderLeft:`3px solid ${pace.ratio>1.2?C.red:pace.ratio<0.75?C.teal:C.warn}`}),margin:"12px 16px 0",padding:"14px 16px"}}>
+          <div style={{color:C.text,fontSize:14,fontWeight:700,marginBottom:5}}>
+            {pace.ratio>1.2?"🔴 Vas gastando más de lo normal":pace.ratio<0.75?"🟢 Mes más liviano que de costumbre":"🟡 Ritmo de gasto normal"}
+          </div>
+          <div style={{color:C.textDim,fontSize:13,lineHeight:1.6}}>
+            {pace.ratio>1.2?`Van ${pace.dom} días y ya gastaste ${fmtARS(pace.gastoMes)}. Si seguís así, cerrarías el mes en ${fmtARS(pace.proyectado)} — un ${((pace.ratio-1)*100).toFixed(0)}% más que el mes pasado (${fmtARS(pace.gastoPrev)}).`
+            :pace.ratio<0.75?`Van ${pace.dom} días y gastaste ${fmtARS(pace.gastoMes)} — bastante menos que de costumbre. Si seguís así, este mes te va a sobrar plata extra.`
+            :`Van ${pace.dom} días del mes. Gastaste ${fmtARS(pace.gastoMes)} — en línea con tu promedio.`}
+          </div>
+        </div>
+      )}
+
+      {/* Insights */}
+      {insights.length>0&&(
+        <div style={{margin:"12px 16px 0"}}>
+          <div style={{color:C.muted,fontSize:11,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:10}}>Lo que veo en tus números</div>
+          {insights.map((t,i)=>(
+            <div key={i} style={{...gCard({borderRadius:18}),padding:"16px",marginBottom:10,borderLeft:`3px solid ${tipColor[t.tipo]||C.blue}`}}>
+              <div style={{color:C.text,fontSize:14,fontWeight:700,marginBottom:5}}>{t.titulo}</div>
+              <div style={{color:C.textDim,fontSize:13,lineHeight:1.65}}>{t.txt}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Qué hacer con lo que sobra */}
+      {extraMes>0&&sugestiones.length>0&&(
+        <div style={{margin:"12px 16px 0"}}>
+          <div style={{color:C.muted,fontSize:11,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:10}}>💸 Este mes te sobró {fmtARS(extraMes)}</div>
+          {sugestiones.map((s,i)=>(
+            <div key={i} style={{...gCard({borderRadius:16}),padding:"14px 16px",marginBottom:8}}>
+              <div style={{display:"flex",gap:10,alignItems:"flex-start"}}><span style={{fontSize:22,flexShrink:0}}>{s.emoji}</span><div><div style={{color:C.text,fontSize:14,fontWeight:700,marginBottom:4}}>{s.titulo}</div><div style={{color:C.textDim,fontSize:13,lineHeight:1.6}}>{s.txt}</div></div></div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Proyección */}
+      {avgAhorro>0&&(
+        <div style={{...gCard({borderRadius:22}),margin:"12px 16px 0",padding:"18px 16px"}}>
+          <div style={{color:C.muted,fontSize:11,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:4}}>📈 Tu patrimonio en 12 meses</div>
+          <div style={{color:C.textDim,fontSize:13,marginBottom:16}}>Si seguís al mismo ritmo que ahora.</div>
+          <ProyeccionChart total={total} avgAhorro={avgAhorro}/>
+          <div style={{display:"flex",justifyContent:"space-between",marginTop:14}}>
+            <div><div style={{color:C.muted,fontSize:10,textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:3}}>Hoy</div><div style={{color:C.text,fontSize:15,fontWeight:600}}>{fmtARS(total)}</div></div>
+            <div style={{textAlign:"right"}}><div style={{color:C.muted,fontSize:10,textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:3}}>En 12 meses</div><div style={{color:C.teal,fontSize:15,fontWeight:600}}>{fmtARS(total+avgAhorro*12)}</div></div>
+          </div>
+        </div>
+      )}
+
+      {/* Aprende */}
+      <div style={{margin:"12px 16px 0"}}>
+        <div style={{color:C.muted,fontSize:11,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:10}}>📚 Conceptos básicos</div>
+        <TipCard emoji="🛡️" titulo="¿Qué es la reserva de emergencia?" contenido="Es plata que guardás solo para imprevistos grandes — quedarte sin trabajo, una enfermedad, un gasto enorme. La regla es que no la tocás para nada más. Lo ideal: tener entre 3 y 6 meses de tus gastos habituales en un lugar seguro y fácil de acceder (banco o efectivo). Si la usás, la primera prioridad es volver a armarla."/>
+        <TipCard emoji="💲" titulo="¿Por qué tener algo en dólares?" contenido="Los pesos pierden valor todos los años por la inflación — o sea, con $100 hoy comprás menos que con $100 hace un año. El dólar también pierde valor, pero mucho más lento. Tener el 10-15% de tu plata en dólares es como un seguro: si el peso cae mucho, al menos esa parte se mantiene. No es para enriquecerte, es para proteger lo que ya tenés."/>
+        <TipCard emoji="📈" titulo="¿Qué es un FCI y para qué sirve?" contenido="Un Fondo Común de Inversión es como una alcancía que rinde sola. Metés plata, y todos los días crece un poquito (más que tenerla quieta). Mercado Pago tiene uno que se llama Cuenta Remunerada — la plata está disponible cuando la necesitás y rinde todos los días. Es una buena opción para la plata que no vas a gastar en el corto plazo pero tampoco querés dejar quieta."/>
+        <TipCard emoji="💰" titulo="¿Cuánto debería ahorrar por mes?" contenido="No hay una regla exacta, pero hay una guía clásica llamada 50/30/20: 50% de lo que ganás para lo necesario (comida, transporte, servicios), 30% para lo que querés pero no es indispensable (salidas, ropa, ocio), y 20% para ahorro o pagar deudas. Si lográs ahorrar el 20% o más, estás muy bien. Si ahorrás algo positivo aunque sea, ya estás adelante de mucha gente."/>
+        <TipCard emoji="🎯" titulo="¿Cómo funciona un plan de ahorro?" contenido="La idea es simple: decidís para qué querés ahorrar (un viaje, una moto, mudarte), cuánto necesitás y cuándo querés tenerlo. Con esos datos, la app te dice cuánto tenés que guardar por mes. El truco es que una vez que sabés el número exacto, es mucho más fácil hacerlo — ya no es 'tengo que ahorrar más', sino 'tengo que guardar $X este mes'."/>
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// APP
+// ════════════════════════════════════════════════════════════════════════════
+function App() {
+  const [saldos,    setSaldos]    = useState(()=>loadJ(S_SALDOS,null));
+  const [movs,      setMovs]      = useState(()=>loadJ(S_MOVS,[]));
+  const [planes,    setPlanes]    = useState(()=>loadJ(S_PLANES,[]));
+  const [programados,setProgramados]=useState(()=>loadJ(S_PROGRAMADOS,[]));
+  const [confirmados,setConfirmados]=useState(()=>{
+    const raw=loadJ(S_CONFIRMADOS,{});
+    const cutoff=new Date(Date.now()-60*864e5).toISOString().slice(0,10);
+    const clean={};
+    Object.entries(raw).forEach(([k,v])=>{const d=k.split("|")[1];if(d&&d>=cutoff)clean[k]=v;});
+    return clean;
+  });
+  const [tab,       setTab]       = useState("inicio");
+  const [dolar,     setDolar]     = useState(null);
+  const [dolarTime, setDolarTime] = useState(null);
+  const [pullY,     setPullY]     = useState(0);
+  const [refreshing,setRefreshing]= useState(false);
+  const [pendientes,setPendientes]= useState([]);
+  const touchStartY = useRef(0);
+  const isTouching  = useRef(false);
+
+  const fetchDolar = useCallback((cb)=>{
+    fetch("https://dolarapi.com/v1/dolares/blue").then(r=>r.json()).then(d=>{if(d?.venta){setDolar(d.venta);setDolarTime(new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"}));}cb&&cb();}).catch(()=>{cb&&cb();});
+  },[]);
+
+  useEffect(()=>{fetchDolar();},[fetchDolar]);
+  useEffect(()=>{setPendientes(getPendientes(programados,confirmados));},[programados,confirmados,tab]);
+
+  const handleTouchStart=useCallback(e=>{if(window.scrollY===0){touchStartY.current=e.touches[0].clientY;isTouching.current=true;}},[]);
+  const handleTouchMove=useCallback(e=>{if(!isTouching.current)return;const diff=e.touches[0].clientY-touchStartY.current;if(diff>0&&window.scrollY===0)setPullY(Math.min(diff*0.35,70));else setPullY(0);},[]);
+  const handleTouchEnd=useCallback(()=>{if(!isTouching.current)return;isTouching.current=false;if(pullY>55){setRefreshing(true);setPullY(0);fetchDolar(()=>setRefreshing(false));}else setPullY(0);touchStartY.current=0;},[pullY,fetchDolar]);
+
+  const handleSave=useCallback(mov=>{
+    setSaldos(prev=>{const ns={...prev};if(mov.tipo==="gasto")ns[mov.bolsilloId]=(ns[mov.bolsilloId]||0)-mov.monto;if(mov.tipo==="ingreso")ns[mov.bolsilloId]=(ns[mov.bolsilloId]||0)+mov.monto;if(mov.tipo==="transfer"){ns[mov.origenId]=(ns[mov.origenId]||0)-mov.monto;ns[mov.destinoId]=(ns[mov.destinoId]||0)+mov.monto;}saveJ(S_SALDOS,ns);return ns;});
+    setMovs(prev=>{const nm=[mov,...prev];saveJ(S_MOVS,nm);return nm;});
+    if(mov.tipo!=="transfer")setTab("inicio");
+  },[]);
+
+  const handleDelete=useCallback(id=>{
+    setMovs(prev=>{const mov=prev.find(m=>m.id===id);if(!mov)return prev;setSaldos(s=>{const ns={...s};if(mov.tipo==="gasto")ns[mov.bolsilloId]=(ns[mov.bolsilloId]||0)+mov.monto;if(mov.tipo==="ingreso")ns[mov.bolsilloId]=(ns[mov.bolsilloId]||0)-mov.monto;if(mov.tipo==="transfer"){ns[mov.origenId]=(ns[mov.origenId]||0)+mov.monto;ns[mov.destinoId]=(ns[mov.destinoId]||0)-mov.monto;}saveJ(S_SALDOS,ns);return ns;});const nm=prev.filter(m=>m.id!==id);saveJ(S_MOVS,nm);return nm;});
+  },[]);
+
+  const handleConfirmar=(pendiente,monto)=>{
+    const mov={id:uid(),tipo:"ingreso",monto,fecha:today(),nota:pendiente.nombre,negocio:false,fuenteId:pendiente.fuenteId,bolsilloId:pendiente.bolsilloId,programado:true};
+    handleSave(mov);
+    const nc={...confirmados,[`${pendiente.id}|${today()}`]:"confirmado"};setConfirmados(nc);saveJ(S_CONFIRMADOS,nc);
+    setPendientes(p=>p.filter(x=>x.id!==pendiente.id));
+  };
+  const handleSaltar=pendiente=>{
+    const nc={...confirmados,[`${pendiente.id}|${today()}`]:"saltado"};setConfirmados(nc);saveJ(S_CONFIRMADOS,nc);
+    setPendientes(p=>p.filter(x=>x.id!==pendiente.id));
+  };
+
+  // avgAhorro para planes
+  const c3m=new Date(Date.now()-90*864e5).toISOString().slice(0,10);
+  const m3m=(movs||[]).filter(m=>m.fecha>=c3m);
+  const g3m=m3m.filter(m=>m.tipo==="gasto").reduce((s,m)=>s+m.monto,0);
+  const i3m=m3m.filter(m=>m.tipo==="ingreso").reduce((s,m)=>s+m.monto,0);
+  const avgAhorro=(i3m-g3m)/Math.max(1,Math.min(3,m3m.length>0?Math.ceil((Date.now()-new Date(m3m.map(m=>m.fecha).sort()[0]+"T12:00:00"))/(30*864e5)):1));
+
+  if(!saldos) return(
+    <div style={{background:C.bg,minHeight:"100vh",fontFamily:"DM Sans, sans-serif"}}>
+      <div style={{position:"fixed",inset:0,background:"radial-gradient(ellipse 80% 50% at 15% 0%,rgba(0,201,167,0.14) 0%,transparent 60%),radial-gradient(ellipse 50% 40% at 85% 90%,rgba(107,140,255,0.1) 0%,transparent 60%),#060A0E",zIndex:0}}/>
+      <div style={{position:"relative",zIndex:1}}><SetupScreen onDone={s=>setSaldos(s)}/></div>
+    </div>
+  );
+
+  const NAV=[{id:"inicio",emoji:"🏠",label:"INICIO"},{id:"registrar",emoji:"✏️",label:"NUEVO"},{id:"asesor",emoji:"💡",label:"ASESOR"},{id:"planes",emoji:"🎯",label:"PLANES"},{id:"movimientos",emoji:"📋",label:"HISTORIAL"}];
+
+  return(
+    <div style={{background:C.bg,minHeight:"100vh",fontFamily:"DM Sans, sans-serif",maxWidth:430,margin:"0 auto",position:"relative"}}
+      onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
+      <style>{`*{box-sizing:border-box}body{margin:0;background:#060A0E}input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}input[type=date]::-webkit-calendar-picker-indicator{filter:invert(0.35)}::-webkit-scrollbar{width:0}@keyframes spin{to{transform:rotate(360deg)}}@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@200;300;400;500;600;700&display=swap');`}</style>
+      <div style={{position:"fixed",inset:0,maxWidth:430,margin:"0 auto",background:"radial-gradient(ellipse 90% 50% at 10% 0%,rgba(0,201,167,0.13) 0%,transparent 55%),radial-gradient(ellipse 60% 40% at 90% 85%,rgba(107,140,255,0.09) 0%,transparent 55%),#060A0E",zIndex:0}}/>
+      {(pullY>10||refreshing)&&<div style={{position:"fixed",top:Math.max(pullY-30,8),left:"50%",transform:"translateX(-50%)",zIndex:50,width:34,height:34,borderRadius:"50%",...gTeal({borderRadius:"50%"}),display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{width:16,height:16,border:`2px solid ${C.teal}`,borderTopColor:"transparent",borderRadius:"50%",animation:refreshing?"spin 0.7s linear infinite":undefined,transform:refreshing?undefined:`rotate(${pullY*3}deg)`}}/></div>}
+      <div style={{position:"relative",zIndex:1,transform:`translateY(${Math.min(pullY,60)}px)`,transition:pullY===0?"transform 0.3s":"none"}}>
+        <div style={{padding:"54px 20px 10px",display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
+          <h1 style={{color:tab==="inicio"?C.muted:C.text,fontSize:tab==="inicio"?15:22,fontWeight:tab==="inicio"?400:700,margin:0,letterSpacing:tab==="inicio"?0:"-0.01em"}}>
+            {{inicio:"Finanzas",registrar:"Registrar ✏️",asesor:"Asesor 💡",planes:"Planes 🎯",movimientos:"Historial 📋"}[tab]}
+          </h1>
+          {tab==="inicio"&&dolar&&<div style={{...gCard({borderRadius:10}),padding:"6px 12px",color:C.warn,fontSize:13,fontWeight:600}}>Blue ${fmtNum(dolar)}</div>}
+        </div>
+        {tab==="inicio"      &&<InicioTab saldos={saldos} movs={movs} dolar={dolar} dolarTime={dolarTime} onQuickSave={handleSave}/>}
+        {tab==="registrar"   &&<RegistrarTab onSave={handleSave} programados={programados} setProgramados={setProgramados}/>}
+        {tab==="asesor"      &&<AsesorTab saldos={saldos} movs={movs} dolar={dolar} planes={planes}/>}
+        {tab==="planes"      &&<PlanesTab planes={planes} setPlanes={setPlanes} avgAhorro={avgAhorro}/>}
+        {tab==="movimientos" &&<MovimientosTab movs={movs} onDelete={handleDelete}/>}
+      </div>
+      <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:430,background:"rgba(6,10,14,0.7)",backdropFilter:"blur(40px) saturate(1.8)",WebkitBackdropFilter:"blur(40px) saturate(1.8)",borderTop:"1px solid rgba(255,255,255,0.07)",display:"flex",paddingBottom:"max(env(safe-area-inset-bottom,0px),14px)",zIndex:10}}>
+        {NAV.map(n=>(<button key={n.id} onClick={()=>setTab(n.id)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2,background:"none",border:"none",cursor:"pointer",padding:"9px 0",color:tab===n.id?C.teal:C.muted,transition:"color 0.2s",fontFamily:"DM Sans, sans-serif"}}>
+          <span style={{fontSize:tab===n.id?21:19,transition:"font-size 0.2s",filter:tab===n.id?`drop-shadow(0 0 8px ${C.teal})`:"none"}}>{n.emoji}</span>
+          <span style={{fontSize:8,fontWeight:700,letterSpacing:"0.05em"}}>{n.label}</span>
+        </button>))}
+      </div>
+      {pendientes.length>0&&<ConfirmacionModal pendiente={pendientes[0]} onConfirm={handleConfirmar} onSaltar={handleSaltar}/>}
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script></body></html>
